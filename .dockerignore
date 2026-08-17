@@ -1,8 +1,0 @@
-.venv
-__pycache__
-*.pyc
-.pytest_cache
-.git
-.gitignore
-*.log
-bench/benchmark_results.jsonl
