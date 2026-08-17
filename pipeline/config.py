@@ -36,7 +36,7 @@ class Settings(BaseSettings):
         alias="LLM_PROVIDER"
     )
     cerebras_model: str = Field(
-        default="llama-3.3-70b",
+        default="llama3.1-8b",
         alias="CEREBRAS_MODEL"
     )
     cerebras_base_url: str = Field(
