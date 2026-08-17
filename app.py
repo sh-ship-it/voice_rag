@@ -123,59 +123,147 @@ process_query = spaces.GPU(_exec_pipeline) if has_zerogpu else _exec_pipeline
 
 
 # ---------------------------------------------------------------------------
-# Gradio Clean White Theme Setup
+# Gradio Pure White & Black Monochrome Theme Setup
 # ---------------------------------------------------------------------------
 
 custom_css = """
-/* Clean Light Theme Styles */
-body, .gradio-container {
-    background-color: #f8fafc !important;
-    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+/* Pure White & Black Clean High-Contrast Aesthetic */
+body, .gradio-container, .gradio-container-6-24-0 {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
 }
 
+/* All Cards, Inputs, Textboxes, and Containers */
 .main-header {
     text-align: center;
-    padding: 24px 0 16px 0;
-    margin-bottom: 12px;
-    background: #ffffff;
-    border-radius: 12px;
-    border: 1px solid #e2e8f0;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    padding: 24px 16px;
+    margin-bottom: 20px;
+    background: #ffffff !important;
+    border: 2px solid #000000 !important;
+    border-radius: 8px !important;
 }
 
 .main-header h1 {
-    font-size: 28px;
-    font-weight: 700;
-    color: #0f172a;
+    font-size: 26px;
+    font-weight: 800;
+    color: #000000 !important;
     margin-bottom: 6px;
+    letter-spacing: -0.5px;
 }
 
 .main-header p {
-    font-size: 15px;
-    color: #64748b;
+    font-size: 14px;
+    color: #000000 !important;
     margin: 0;
+    font-weight: 500;
 }
 
-.card-box {
-    background: #ffffff !important;
-    border-radius: 12px !important;
-    border: 1px solid #e2e8f0 !important;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
-    padding: 16px !important;
+/* Force pure white bg & black borders everywhere */
+div, section, .block, .panel, .card, .form, textarea, input, .gr-box, .gr-panel, .gr-input {
+    border-color: #000000 !important;
+    color: #000000 !important;
 }
 
-.primary-btn {
-    background: linear-gradient(135deg, #2563eb, #1d4ed8) !important;
+textarea, input[type="text"] {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    border: 1.5px solid #000000 !important;
+    border-radius: 6px !important;
+    font-weight: 500 !important;
+}
+
+/* Primary Black Button */
+.primary-btn, button.primary {
+    background-color: #000000 !important;
     color: #ffffff !important;
-    font-weight: 600 !important;
-    border-radius: 8px !important;
+    border: 2px solid #000000 !important;
+    border-radius: 6px !important;
+    font-weight: 700 !important;
+    transition: all 0.15s ease-in-out !important;
+}
+
+.primary-btn:hover, button.primary:hover {
+    background-color: #262626 !important;
+    color: #ffffff !important;
+}
+
+/* Secondary Button (White with Black Border) */
+.secondary-btn, button.secondary {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    border: 2px solid #000000 !important;
+    border-radius: 6px !important;
+    font-weight: 700 !important;
+}
+
+.secondary-btn:hover, button.secondary:hover {
+    background-color: #f4f4f5 !important;
+}
+
+/* Accordions and Tabs */
+.accordion, details {
+    background-color: #ffffff !important;
+    border: 1.5px solid #000000 !important;
+    border-radius: 6px !important;
+}
+
+/* Tables */
+table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+    border: 1.5px solid #000000 !important;
+    background-color: #ffffff !important;
+    color: #000000 !important;
+}
+
+th, td {
+    border: 1px solid #000000 !important;
+    padding: 8px 12px !important;
+    color: #000000 !important;
+}
+
+th {
+    background-color: #f4f4f5 !important;
+    font-weight: 700 !important;
+}
+
+/* Example Chips */
+.examples-table, .gr-samples-table {
+    border: 1.5px solid #000000 !important;
+    background: #ffffff !important;
 }
 """
 
-theme = gr.themes.Soft(
-    primary_hue="blue",
-    neutral_hue="slate",
-    font=["Inter", "ui-sans-serif", "system-ui"],
+theme = gr.themes.Base(
+    primary_hue="neutral",
+    neutral_hue="neutral",
+    font=["Inter", "system-ui", "sans-serif"],
+).set(
+    body_background_fill="#ffffff",
+    body_background_fill_dark="#ffffff",
+    body_text_color="#000000",
+    body_text_color_dark="#000000",
+    block_background_fill="#ffffff",
+    block_background_fill_dark="#ffffff",
+    block_border_width="1.5px",
+    block_border_color="#000000",
+    block_border_color_dark="#000000",
+    input_background_fill="#ffffff",
+    input_background_fill_dark="#ffffff",
+    input_border_color="#000000",
+    input_border_color_dark="#000000",
+    input_border_width="1.5px",
+    button_primary_background_fill="#000000",
+    button_primary_background_fill_dark="#000000",
+    button_primary_text_color="#ffffff",
+    button_primary_text_color_dark="#ffffff",
+    button_secondary_background_fill="#ffffff",
+    button_secondary_background_fill_dark="#ffffff",
+    button_secondary_text_color="#000000",
+    button_secondary_text_color_dark="#000000",
+    button_secondary_border_color="#000000",
+    button_secondary_border_color_dark="#000000",
 )
 
 # ---------------------------------------------------------------------------
@@ -187,8 +275,8 @@ with gr.Blocks(title="Voice Indic RAG", theme=theme, css=custom_css) as demo:
         gr.HTML(
             """
             <div class="main-header">
-                <h1>🎙️ Voice-Enabled Indic RAG System</h1>
-                <p>Ultra-Low Latency Multilingual Question Answering (91,681 Indexed Chunks | Sub-35ms CPU Retrieval)</p>
+                <h1>🎙️ VOICE-ENABLED INDIC RAG</h1>
+                <p>Ultra-Low Latency Multilingual Question Answering (91,681 Chunks | Sub-35ms CPU Retrieval)</p>
             </div>
             """
         )
@@ -303,4 +391,4 @@ with gr.Blocks(title="Voice Indic RAG", theme=theme, css=custom_css) as demo:
 
 # Launch app if executed directly
 if __name__ == "__main__":
-    demo.launch(server_name="0.0.0.0", server_port=7860)
+    demo.launch(server_name="0.0.0.0", server_port=7860, inbrowser=True)
