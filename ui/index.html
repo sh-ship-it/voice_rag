@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Voice-Enabled RAG Demo</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --card-border: #334155;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #6366f1;
+      --primary-hover: #4f46e5;
+      --success: #10b981;
+      --danger: #ef4444;
+      --highlight: #38bdf8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding: 24px 16px;
+      display: flex;
+      justify-content: center;
+    }
+
+    .container {
+      max-width: 760px;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 8px;
+    }
+
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    p.subtitle {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      margin-top: 4px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 20px;
+    }
+
+    /* Record Area */
+    .record-area {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 0;
+    }
+
+    .record-btn {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: var(--primary);
+      border: none;
+      color: #fff;
+      font-size: 1.8rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);
+    }
+
+    .record-btn:hover {
+      background: var(--primary-hover);
+      transform: scale(1.05);
+    }
+
+    .record-btn.recording {
+      background: var(--danger);
+      animation: pulse 1.2s infinite;
+      box-shadow: 0 0 20px rgba(239, 68, 68, 0.6);
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.1); }
+      100% { transform: scale(1); }
+    }
+
+    .record-status {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    .divider {
+      text-align: center;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      margin: 12px 0;
+      position: relative;
+    }
+
+    .divider::before, .divider::after {
+      content: "";
+      position: absolute;
+      top: 50%;
+      width: 42%;
+      border-bottom: 1px solid var(--card-border);
+    }
+    .divider::before { left: 0; }
+    .divider::after { right: 0; }
+
+    /* Text Input Fallback */
+    .text-input-row {
+      display: flex;
+      gap: 8px;
+    }
+
+    .text-input {
+      flex: 1;
+      background: #0f172a;
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: #fff;
+      font-size: 0.95rem;
+      outline: none;
+    }
+
+    .text-input:focus {
+      border-color: var(--primary);
+    }
+
+    .btn {
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 18px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .btn:hover {
+      background: var(--primary-hover);
+    }
+
+    /* Processing State */
+    .processing-box {
+      display: none;
+      text-align: center;
+      padding: 24px;
+      color: var(--highlight);
+      font-weight: 600;
+    }
+
+    /* Results Section */
+    .results-container {
+      display: none;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* 1. Transcript */
+    .transcript-box {
+      background: #0f172a;
+      border-left: 4px solid var(--highlight);
+      padding: 12px 16px;
+      border-radius: 4px 8px 8px 4px;
+    }
+
+    .transcript-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .transcript-text {
+      font-size: 1rem;
+      color: #fff;
+      font-style: italic;
+    }
+
+    /* 2. Badge */
+    .badge-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .badge-grounded {
+      background: rgba(16, 185, 129, 0.2);
+      color: var(--success);
+      border: 1px solid var(--success);
+    }
+
+    .badge-refused {
+      background: rgba(239, 68, 68, 0.2);
+      color: var(--danger);
+      border: 1px solid var(--danger);
+    }
+
+    /* 3. Answer Text */
+    .answer-box {
+      font-size: 1.1rem;
+      line-height: 1.6;
+      color: #fff;
+      background: #0f172a;
+      padding: 16px;
+      border-radius: 8px;
+      border: 1px solid var(--card-border);
+    }
+
+    /* 4. Cited Chunks (Expandable Accordion) */
+    details.chunks-accordion {
+      background: #0f172a;
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    details summary {
+      padding: 12px 16px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      user-select: none;
+    }
+
+    details summary:hover {
+      color: #fff;
+    }
+
+    .chunks-list {
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      border-top: 1px solid var(--card-border);
+    }
+
+    .chunk-item {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      font-size: 0.88rem;
+    }
+
+    .chunk-item-id {
+      font-family: monospace;
+      font-weight: 700;
+      color: var(--highlight);
+      margin-bottom: 4px;
+      font-size: 0.8rem;
+    }
+
+    /* 5. Latency Table */
+    table.latency-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+      margin-top: 6px;
+    }
+
+    table.latency-table th, table.latency-table td {
+      padding: 8px 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    table.latency-table th {
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      text-transform: uppercase;
+    }
+
+    table.latency-table tr.highlight-row {
+      background: rgba(99, 102, 241, 0.15);
+      font-weight: 700;
+      border-top: 2px solid var(--primary);
+      border-bottom: 2px solid var(--primary);
+    }
+
+    table.latency-table tr.highlight-row td {
+      color: #fff;
+      font-size: 0.95rem;
+    }
+
+    .target-met {
+      color: var(--success);
+      font-weight: 700;
+      margin-left: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Voice-Enabled RAG Demo</h1>
+      <p class="subtitle">Sarvam STT • Hybrid Retrieval (FAISS + BM25) • Cerebras Fast LLM</p>
+    </header>
+
+    <!-- Query Input Card -->
+    <div class="card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: 600;">Spoken / Query Language:</span>
+        <select id="langSelect" style="background: #0f172a; color: #fff; border: 1px solid var(--card-border); padding: 4px 8px; border-radius: 6px; font-size: 0.85rem; outline: none; cursor: pointer;">
+          <option value="hi-IN" selected>Hindi (हिन्दी - hi-IN)</option>
+          <option value="en-IN">English (India - en-IN)</option>
+        </select>
+      </div>
+
+      <div class="record-area">
+        <button id="recordBtn" class="record-btn" title="Click to start/stop recording">🎙️</button>
+        <div id="recordStatus" class="record-status">Click mic to record spoken question</div>
+      </div>
+
+      <div class="divider">OR TYPE</div>
+
+      <form id="textQueryForm" class="text-input-row">
+        <input 
+          type="text" 
+          id="queryText" 
+          class="text-input" 
+          placeholder="Type Hindi / English / Hinglish query..." 
+          autocomplete="off"
+        />
+        <button type="submit" class="btn">Send</button>
+      </form>
+    </div>
+
+    <!-- Processing State -->
+    <div id="processingBox" class="card processing-box">
+      Processing voice query through RAG pipeline...
+    </div>
+
+    <!-- Output Section (Rendered in specified order) -->
+    <div id="resultsContainer" class="card results-container">
+      <!-- 1. The Transcript -->
+      <div id="transcriptBox" class="transcript-box">
+        <div class="transcript-label">Transcript</div>
+        <div id="transcriptText" class="transcript-text"></div>
+      </div>
+
+      <!-- 2. The Grounded / Refused Badge -->
+      <div class="badge-row">
+        <span id="groundedBadge" class="badge"></span>
+        <span id="confidenceTag" style="font-size: 0.8rem; color: var(--text-muted);"></span>
+      </div>
+
+      <!-- 3. The Answer Text -->
+      <div id="answerText" class="answer-box"></div>
+
+      <!-- 4. The Cited Chunks (Collapsed / Expandable) -->
+      <details id="chunksAccordion" class="chunks-accordion">
+        <summary>Cited Context Chunks (<span id="chunkCount">0</span>)</summary>
+        <div id="chunksList" class="chunks-list"></div>
+      </details>
+
+      <!-- 5. The Latency Table -->
+      <div>
+        <div style="font-size: 0.8rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px;">
+          Latency Breakdown (ms)
+        </div>
+        <table class="latency-table">
+          <thead>
+            <tr>
+              <th>Pipeline Stage</th>
+              <th style="text-align: right;">Duration</th>
+            </tr>
+          </thead>
+          <tbody id="latencyTableBody">
+            <!-- Dynamically injected -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const recordBtn = document.getElementById('recordBtn');
+    const recordStatus = document.getElementById('recordStatus');
+    const textQueryForm = document.getElementById('textQueryForm');
+    const queryText = document.getElementById('queryText');
+    const langSelect = document.getElementById('langSelect');
+    const processingBox = document.getElementById('processingBox');
+    const resultsContainer = document.getElementById('resultsContainer');
+
+    const transcriptBox = document.getElementById('transcriptBox');
+    const transcriptText = document.getElementById('transcriptText');
+    const groundedBadge = document.getElementById('groundedBadge');
+    const confidenceTag = document.getElementById('confidenceTag');
+    const answerText = document.getElementById('answerText');
+    const chunksAccordion = document.getElementById('chunksAccordion');
+    const chunkCount = document.getElementById('chunkCount');
+    const chunksList = document.getElementById('chunksList');
+    const latencyTableBody = document.getElementById('latencyTableBody');
+
+    let mediaRecorder = null;
+    let audioChunks = [];
+    let isRecording = false;
+
+    // Record Button Click Handler
+    recordBtn.addEventListener('click', async () => {
+      if (!isRecording) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          mediaRecorder = new MediaRecorder(stream);
+          audioChunks = [];
+
+          mediaRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0) audioChunks.push(e.data);
+          };
+
+          mediaRecorder.onstop = async () => {
+            stream.getTracks().forEach(t => t.stop());
+            const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+            await uploadAudio(audioBlob);
+          };
+
+          mediaRecorder.start();
+          isRecording = true;
+          recordBtn.classList.add('recording');
+          recordStatus.textContent = "Recording... Click again to stop & send";
+        } catch (err) {
+          console.error("Microphone access error:", err);
+          alert("Could not access microphone. Please type your query below instead.");
+        }
+      } else {
+        mediaRecorder.stop();
+        isRecording = false;
+        recordBtn.classList.remove('recording');
+        recordStatus.textContent = "Uploading audio...";
+      }
+    });
+
+    // Text Form Submission
+    textQueryForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const val = queryText.value.trim();
+      if (!val) return;
+      await uploadText(val);
+    });
+
+    async function uploadAudio(blob) {
+      showProcessing(true);
+      const selectedLang = (langSelect && langSelect.value) ? langSelect.value : 'hi-IN';
+      const formData = new FormData();
+      formData.append('file', blob, 'recording.webm');
+      formData.append('language_code', selectedLang);
+
+      try {
+        const resp = await fetch('/query', {
+          method: 'POST',
+          body: formData,
+        });
+        if (!resp.ok) throw new Error("Server error: " + resp.status);
+        const data = await resp.json();
+        renderResult(data);
+      } catch (err) {
+        alert("Query error: " + err.message);
+      } finally {
+        showProcessing(false);
+        recordStatus.textContent = "Click mic to record spoken question";
+      }
+    }
+
+    async function uploadText(text) {
+      showProcessing(true);
+      const selectedLang = (langSelect && langSelect.value) ? langSelect.value : 'hi-IN';
+      const formData = new FormData();
+      formData.append('query_text', text);
+      formData.append('language_code', selectedLang);
+
+      try {
+        const resp = await fetch('/query', {
+          method: 'POST',
+          body: formData,
+        });
+        if (!resp.ok) throw new Error("Server error: " + resp.status);
+        const data = await resp.json();
+        renderResult(data);
+      } catch (err) {
+        alert("Query error: " + err.message);
+      } finally {
+        showProcessing(false);
+      }
+    }
+
+    function showProcessing(show) {
+      processingBox.style.display = show ? 'block' : 'none';
+      if (show) resultsContainer.style.display = 'none';
+    }
+
+    function renderResult(data) {
+      resultsContainer.style.display = 'flex';
+
+      // 1. Transcript
+      if (data.transcription && data.transcription.trim()) {
+        transcriptBox.style.display = 'block';
+        transcriptText.textContent = `"${data.transcription}"`;
+      } else if (data.query) {
+        transcriptBox.style.display = 'block';
+        transcriptText.textContent = `"${data.query}"`;
+      } else {
+        transcriptBox.style.display = 'none';
+      }
+
+      // 2. Badge (Grounded or Refused)
+      const isRefusal = (data.status === 'guardrail_blocked' || data.status === 'low_confidence_fallback' || !data.grounded);
+      if (isRefusal) {
+        groundedBadge.className = 'badge badge-refused';
+        groundedBadge.textContent = data.status === 'guardrail_blocked' ? 'Refused (Guardrail)' : 'Low Confidence / Ungrounded';
+      } else {
+        groundedBadge.className = 'badge badge-grounded';
+        groundedBadge.textContent = 'Grounded';
+      }
+      confidenceTag.textContent = `Confidence: ${(data.confidence || 'medium').toUpperCase()}`;
+
+      // 3. Answer Text
+      answerText.textContent = data.answer || "(No response text)";
+
+      // 4. Cited Chunks (Expandable)
+      const chunks = (data.retrieval_result && data.retrieval_result.chunks) || [];
+      chunkCount.textContent = chunks.length;
+      chunksList.innerHTML = '';
+      
+      if (chunks.length > 0) {
+        chunksAccordion.style.display = 'block';
+        chunks.forEach((sc, i) => {
+          const item = document.createElement('div');
+          item.className = 'chunk-item';
+          item.innerHTML = `
+            <div class="chunk-item-id">[#${i+1}] ${sc.chunk.chunk_id} (${sc.chunk.chunk_strategy || 'chunk'})</div>
+            <div>${escapeHtml(sc.chunk.text)}</div>
+          `;
+          chunksList.appendChild(item);
+        });
+      } else {
+        chunksAccordion.style.display = 'none';
+      }
+
+      // 5. Latency Table
+      const t = data.timings || {};
+      const coreMs = data.total_rag_core_ms || 0.0;
+      const targetMetHtml = coreMs <= 200.0 ? '<span class="target-met">✅ (&le;200ms Target Met)</span>' : '';
+
+      latencyTableBody.innerHTML = `
+        <tr><td>1. Speech-To-Text (STT)</td><td style="text-align: right; font-family: monospace;">${(data.stt_ms || t.stt || 0).toFixed(2)} ms</td></tr>
+        <tr><td>2. Input Guardrail</td><td style="text-align: right; font-family: monospace;">${(t.guardrail || 0).toFixed(2)} ms</td></tr>
+        <tr><td>3. Dense Query Embedding</td><td style="text-align: right; font-family: monospace;">${(t.embed || 0).toFixed(2)} ms</td></tr>
+        <tr><td>4. Hybrid Retrieval (FAISS + BM25)</td><td style="text-align: right; font-family: monospace;">${(t.retrieve || 0).toFixed(2)} ms</td></tr>
+        <tr><td>5. Confidence Gate Check</td><td style="text-align: right; font-family: monospace;">${(t.gate || 0).toFixed(2)} ms</td></tr>
+        <tr><td>6. Cerebras LLM Generation</td><td style="text-align: right; font-family: monospace;">${(t.generation || 0).toFixed(2)} ms</td></tr>
+        <tr class="highlight-row">
+          <td>&gt;&gt; TOTAL RAG CORE (Stages 2-6)</td>
+          <td style="text-align: right; font-family: monospace;">${coreMs.toFixed(2)} ms ${targetMetHtml}</td>
+        </tr>
+        <tr>
+          <td style="color: var(--text-muted); font-size: 0.85rem;">Total End-to-End (including STT)</td>
+          <td style="text-align: right; font-family: monospace; color: var(--text-muted);">${(t.total || 0).toFixed(2)} ms</td>
+        </tr>
+      `;
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>
