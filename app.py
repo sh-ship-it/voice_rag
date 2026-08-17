@@ -123,18 +123,36 @@ process_query = spaces.GPU(_exec_pipeline) if has_zerogpu else _exec_pipeline
 
 
 # ---------------------------------------------------------------------------
-# Gradio Pure White & Black Monochrome Theme Setup
+# Gradio 100% Pure White & Crisp Black Theme
 # ---------------------------------------------------------------------------
 
 custom_css = """
-/* Pure White & Black Clean High-Contrast Aesthetic */
-body, .gradio-container, .gradio-container-6-24-0 {
+/* Force Pure White Everywhere and Disable Dark Mode completely */
+:root, html, body, gradio-app, .gradio-container, .dark, body.dark {
+    background: #ffffff !important;
     background-color: #ffffff !important;
     color: #000000 !important;
+    --background-fill-primary: #ffffff !important;
+    --background-fill-secondary: #ffffff !important;
+    --block-background-fill: #ffffff !important;
+    --body-background-fill: #ffffff !important;
+    --body-text-color: #000000 !important;
+    --block-label-text-color: #000000 !important;
+    --block-title-text-color: #000000 !important;
+    --block-border-color: #000000 !important;
+    --border-color-primary: #000000 !important;
+    --border-color-accent: #000000 !important;
+    --input-background-fill: #ffffff !important;
+    --input-border-color: #000000 !important;
+    --input-placeholder-color: #71717a !important;
+    --table-border-color: #000000 !important;
+    --table-odd-background-fill: #ffffff !important;
+    --table-even-background-fill: #fafafa !important;
+    --table-row-focus: #f4f4f5 !important;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
 }
 
-/* All Cards, Inputs, Textboxes, and Containers */
+/* Header */
 .main-header {
     text-align: center;
     padding: 24px 16px;
@@ -146,9 +164,9 @@ body, .gradio-container, .gradio-container-6-24-0 {
 
 .main-header h1 {
     font-size: 26px;
-    font-weight: 800;
+    font-weight: 900;
     color: #000000 !important;
-    margin-bottom: 6px;
+    margin: 0 0 8px 0;
     letter-spacing: -0.5px;
 }
 
@@ -159,10 +177,25 @@ body, .gradio-container, .gradio-container-6-24-0 {
     font-weight: 500;
 }
 
-/* Force pure white bg & black borders everywhere */
-div, section, .block, .panel, .card, .form, textarea, input, .gr-box, .gr-panel, .gr-input {
-    border-color: #000000 !important;
+/* Force All Containers, Blocks, and Inputs to be White with Black Borders */
+.block, .panel, .card, .form, textarea, input, .gr-box, .gr-panel, .gr-input, .wrap, .contain, .tabitem {
+    background-color: #ffffff !important;
+    border: 1.5px solid #000000 !important;
+    border-radius: 8px !important;
     color: #000000 !important;
+    box-shadow: none !important;
+}
+
+/* Remove blue header badge labels and make them clean black on white */
+label, .block-title, .label-wrap, span.svelte-1f354aw, span.svelte-15lo0ep, label span {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    border: 1px solid #000000 !important;
+    border-radius: 4px !important;
+    font-weight: 700 !important;
+    font-size: 12px !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.5px !important;
 }
 
 textarea, input[type="text"] {
@@ -171,45 +204,58 @@ textarea, input[type="text"] {
     border: 1.5px solid #000000 !important;
     border-radius: 6px !important;
     font-weight: 500 !important;
+    padding: 10px !important;
 }
 
-/* Primary Black Button */
-.primary-btn, button.primary {
+/* Primary Button: Solid Black with Crisp White Text */
+.primary-btn, button.primary, button.primary-btn {
     background-color: #000000 !important;
     color: #ffffff !important;
     border: 2px solid #000000 !important;
     border-radius: 6px !important;
-    font-weight: 700 !important;
-    transition: all 0.15s ease-in-out !important;
+    font-weight: 800 !important;
+    padding: 10px 20px !important;
+    cursor: pointer !important;
 }
 
 .primary-btn:hover, button.primary:hover {
-    background-color: #262626 !important;
+    background-color: #27272a !important;
     color: #ffffff !important;
 }
 
-/* Secondary Button (White with Black Border) */
+/* Secondary Button: White with Solid Black Border */
 .secondary-btn, button.secondary {
     background-color: #ffffff !important;
     color: #000000 !important;
     border: 2px solid #000000 !important;
     border-radius: 6px !important;
     font-weight: 700 !important;
+    padding: 10px 20px !important;
+    cursor: pointer !important;
 }
 
 .secondary-btn:hover, button.secondary:hover {
     background-color: #f4f4f5 !important;
 }
 
-/* Accordions and Tabs */
+/* Accordions */
 .accordion, details {
     background-color: #ffffff !important;
     border: 1.5px solid #000000 !important;
-    border-radius: 6px !important;
+    border-radius: 8px !important;
+    margin-top: 12px !important;
 }
 
-/* Tables */
-table {
+summary {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    font-weight: 700 !important;
+    padding: 12px !important;
+    border-bottom: 1.5px solid #000000 !important;
+}
+
+/* Tables (Examples & Breakdown) */
+table, .table-wrap, .gr-samples-table {
     border-collapse: collapse !important;
     width: 100% !important;
     border: 1.5px solid #000000 !important;
@@ -217,60 +263,38 @@ table {
     color: #000000 !important;
 }
 
-th, td {
+th, td, tr {
     border: 1px solid #000000 !important;
-    padding: 8px 12px !important;
+    padding: 10px 14px !important;
     color: #000000 !important;
+    background-color: #ffffff !important;
 }
 
 th {
     background-color: #f4f4f5 !important;
-    font-weight: 700 !important;
+    font-weight: 800 !important;
 }
 
-/* Example Chips */
-.examples-table, .gr-samples-table {
+/* Audio Player */
+audio, .audio-container {
+    background-color: #ffffff !important;
     border: 1.5px solid #000000 !important;
-    background: #ffffff !important;
+    border-radius: 6px !important;
 }
 """
 
-theme = gr.themes.Base(
-    primary_hue="neutral",
-    neutral_hue="neutral",
-    font=["Inter", "system-ui", "sans-serif"],
-).set(
-    body_background_fill="#ffffff",
-    body_background_fill_dark="#ffffff",
-    body_text_color="#000000",
-    body_text_color_dark="#000000",
-    block_background_fill="#ffffff",
-    block_background_fill_dark="#ffffff",
-    block_border_width="1.5px",
-    block_border_color="#000000",
-    block_border_color_dark="#000000",
-    input_background_fill="#ffffff",
-    input_background_fill_dark="#ffffff",
-    input_border_color="#000000",
-    input_border_color_dark="#000000",
-    input_border_width="1.5px",
-    button_primary_background_fill="#000000",
-    button_primary_background_fill_dark="#000000",
-    button_primary_text_color="#ffffff",
-    button_primary_text_color_dark="#ffffff",
-    button_secondary_background_fill="#ffffff",
-    button_secondary_background_fill_dark="#ffffff",
-    button_secondary_text_color="#000000",
-    button_secondary_text_color_dark="#000000",
-    button_secondary_border_color="#000000",
-    button_secondary_border_color_dark="#000000",
-)
+js_force_light = """
+function() {
+    document.documentElement.classList.remove('dark');
+    document.body.classList.remove('dark');
+}
+"""
 
 # ---------------------------------------------------------------------------
 # Gradio UI Construction
 # ---------------------------------------------------------------------------
 
-with gr.Blocks(title="Voice Indic RAG", theme=theme, css=custom_css) as demo:
+with gr.Blocks(title="Voice Indic RAG", css=custom_css, js=js_force_light) as demo:
     with gr.Column():
         gr.HTML(
             """
