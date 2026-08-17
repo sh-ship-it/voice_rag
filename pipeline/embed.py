@@ -33,10 +33,15 @@ _MODEL_NAME = _SETTINGS.embedding_model_name  # intfloat/multilingual-e5-small
 QUERY_PREFIX = "query: "
 PASSAGE_PREFIX = "passage: "
 
-_DEVICE = "cpu"
+_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"[pipeline.embed] Loading warm embedding model: {_MODEL_NAME!r} on device '{_DEVICE}' ...", flush=True)
 _WARM_MODEL: SentenceTransformer = SentenceTransformer(_MODEL_NAME, device=_DEVICE)
-_WARM_MODEL.max_seq_length = 24
+_WARM_MODEL.max_seq_length = 32
+if _DEVICE == "cuda":
+    try:
+        _WARM_MODEL = _WARM_MODEL.half()
+    except Exception:
+        pass
 _EMBEDDING_DIM: int = _WARM_MODEL.get_sentence_embedding_dimension()
 print(f"[pipeline.embed] Model {_MODEL_NAME!r} loaded on {_DEVICE} successfully (dim={_EMBEDDING_DIM}).", flush=True)
 

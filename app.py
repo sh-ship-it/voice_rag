@@ -27,11 +27,15 @@ from pipeline.config import get_settings
 from pipeline.orchestrator import run_pipeline
 from pipeline.schemas import PipelineResponse
 
-# ---------------------------------------------------------------------------
-# Pipeline Handler
-# ---------------------------------------------------------------------------
+# Hugging Face ZeroGPU Support
+try:
+    import spaces
+    has_zerogpu = True
+except ImportError:
+    has_zerogpu = False
 
-def process_query(
+
+def _exec_pipeline(
     audio_path: Optional[str],
     text_input: Optional[str],
     language_code: str = "hi-IN",
@@ -113,6 +117,9 @@ def process_query(
         latency_markdown,
         meta_markdown,
     )
+
+
+process_query = spaces.GPU(_exec_pipeline) if has_zerogpu else _exec_pipeline
 
 
 # ---------------------------------------------------------------------------
