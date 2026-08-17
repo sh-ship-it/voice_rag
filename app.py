@@ -311,7 +311,7 @@ function() {
 # Gradio UI Construction
 # ---------------------------------------------------------------------------
 
-with gr.Blocks(title="Voice Indic RAG", css=custom_css, js=js_force_light) as demo:
+with gr.Blocks(title="Voice Indic RAG") as demo:
     with gr.Column():
         gr.HTML(
             """
@@ -420,4 +420,4 @@ with gr.Blocks(title="Voice Indic RAG", css=custom_css, js=js_force_light) as de
 
 # Launch app if executed directly
 if __name__ == "__main__":
-    demo.launch(server_name="0.0.0.0", server_port=7860, inbrowser=True)
+    demo.launch(server_name="0.0.0.0", server_port=7860, inbrowser=True, css=custom_css, js=js_force_light)
