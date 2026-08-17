@@ -1,3 +1,14 @@
+---
+title: Voice-Enabled Indic RAG
+emoji: 🎙️
+colorFrom: blue
+colorTo: indigo
+sdk: gradio
+sdk_version: 6.24.0
+app_file: app.py
+pinned: false
+---
+
 # Voice-Enabled RAG System
 
 A modular, low-latency, voice-enabled Retrieval-Augmented Generation (RAG) system built with Python 3.11.
