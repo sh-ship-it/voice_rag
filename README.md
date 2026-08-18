@@ -1,6 +1,6 @@
 ---
 title: Voice RAG FastAPI Backend
-emoji: 🎙️
+emoji: ⚡
 colorFrom: yellow
 colorTo: green
 sdk: gradio
