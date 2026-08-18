@@ -202,9 +202,9 @@ export default function App() {
         </div>
         <div className="nb-navbar__status">
           <span className="nb-badge nb-badge--accent">
-            🟢 {serverHealth?.chunk_count ? `${serverHealth.chunk_count.toLocaleString()} Chunks Indexed` : '91,681 Chunks Active'}
+            🟢 {serverHealth?.chunk_count ? `${serverHealth.chunk_count.toLocaleString()} Chunks Indexed` : '1.96M Chunks Indexed'}
           </span>
-          <span className="nb-badge nb-badge--dark">FastAPI + Cerebras + Sarvam</span>
+          <span className="nb-badge nb-badge--dark">FastAPI + FAISS + Sarvam STT (Pure Extractive)</span>
         </div>
       </header>
 

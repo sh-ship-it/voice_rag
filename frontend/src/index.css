@@ -513,33 +513,34 @@ html, body {
 }
 
 .answer-box__text {
-  font-size: 1.05rem;
-  font-weight: 500;
-  line-height: 1.7;
-  color: #000000;
+  font-size: 1.15rem;
+  font-weight: 600;
+  line-height: 1.8;
+  color: #050505;
   white-space: pre-wrap;
 }
 
 .answer-box__text--idle {
-  color: #666666;
-  font-style: italic;
-  font-size: 0.95rem;
+  color: #555555;
+  font-style: normal;
+  font-size: 1.0rem;
+  font-weight: 500;
 }
 
 .answer-box__text--loading {
   color: #000000;
-  font-weight: 600;
-  font-size: 0.95rem;
+  font-weight: 700;
+  font-size: 1.05rem;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .inline-spinner {
   display: inline-block;
-  width: 14px;
-  height: 14px;
-  border: 2px solid #000000;
+  width: 16px;
+  height: 16px;
+  border: 2.5px solid #000000;
   border-top-color: transparent;
   border-radius: 50%;
   animation: spin 0.6s linear infinite;
@@ -549,219 +550,168 @@ html, body {
 .answer-box__section {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .answer-box__section-title {
-  font-size: 0.78rem;
+  font-size: 0.82rem;
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
   color: #000000;
 }
 
 .evidence-box {
-  margin-top: 14px;
-  padding: 10px 12px;
-  background: #f8fafc;
-  border: 2px dashed #000000;
-  border-radius: var(--radius-sm);
+  margin-top: 16px;
+  padding: 14px 16px;
+  background: #f0fdf4;
+  border: 2.5px dashed #16a34a;
+  border-radius: var(--radius-md);
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .evidence-box__title {
-  font-size: 0.74rem;
+  font-size: 0.78rem;
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #333333;
+  letter-spacing: 0.06em;
+  color: #166534;
 }
 
 .evidence-box__text {
-  font-size: 0.88rem;
+  font-size: 0.95rem;
   font-weight: 500;
-  line-height: 1.6;
-  color: #111111;
-  font-style: italic;
+  line-height: 1.7;
+  color: #0f172a;
 }
 
 .nb-cursor {
   display: inline-block;
   color: #000000;
   animation: blink-cursor 0.7s infinite;
-  margin-left: 2px;
+  margin-left: 3px;
+  font-weight: 900;
 }
 
 /* Citations */
 .citation-container {
-  padding: 14px;
+  padding: 16px;
 }
 
-.citation-container__header {
+.citation-header {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
-  gap: 8px;
-  flex-wrap: wrap;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
 }
 
-.citation-container__hint {
-  font-size: 0.72rem;
-  font-weight: 600;
-  color: #666666;
+.citation-count-badge {
+  font-family: var(--font-mono);
+  font-weight: 700;
 }
 
 .citation-list {
+  margin-top: 14px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-}
-
-.citation-empty-note {
-  font-size: 0.8rem;
-  color: #666666;
-  font-style: italic;
-  padding: 8px 10px;
-  background: var(--surface-alt);
-  border: 1.5px dashed #000000;
-  border-radius: var(--radius-sm);
-}
-
-.latency-row__bar-fill--pulse {
-  background: repeating-linear-gradient(
-    45deg,
-    #000000,
-    #000000 10px,
-    #333333 10px,
-    #333333 20px
-  );
-  animation: pulse-stripes 1s linear infinite;
-}
-
-@keyframes pulse-stripes {
-  0% { background-position: 0 0; }
-  100% { background-position: 20px 0; }
+  gap: 10px;
 }
 
 .citation-item {
+  padding: 12px 14px;
+  background: var(--surface-alt);
   border: 2px solid #000000;
   border-radius: var(--radius-sm);
-  background: #ffffff;
-  overflow: hidden;
   box-shadow: 2px 2px 0px #000000;
 }
 
-.citation-item__btn {
-  width: 100%;
+.citation-item__header {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  padding: 8px 10px;
-  background: var(--surface-alt);
-  border: none;
-  cursor: pointer;
-  font-family: var(--font-family);
-  font-size: 0.8rem;
-  font-weight: 700;
-  text-align: left;
-}
-
-.citation-item__btn:hover {
-  background: var(--accent-yellow);
-}
-
-.citation-item__btn-left {
-  display: flex;
   align-items: center;
-  gap: 8px;
+  margin-bottom: 6px;
 }
 
 .citation-item__id {
   font-family: var(--font-mono);
-  font-size: 0.78rem;
-  font-weight: 600;
-}
-
-.citation-item__arrow {
-  font-size: 0.7rem;
-  font-weight: 800;
+  font-size: 0.8rem;
+  font-weight: 700;
   color: #000000;
 }
 
-.citation-item__body {
-  padding: 10px 12px;
-  background: #ffffff;
-  border-top: 2px solid #000000;
-}
-
 .citation-item__text {
-  font-size: 0.88rem;
-  line-height: 1.6;
+  font-size: 0.92rem;
   color: #111111;
+  line-height: 1.6;
 }
 
-.citation-item__text--missing {
-  color: #666666;
-  font-style: italic;
-}
-
-/* Latency Card */
+/* Latency Metrics Card */
 .latency-card {
-  padding: 14px;
+  padding: 16px;
 }
 
 .latency-card__header {
   display: flex;
-  align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
+  align-items: center;
+  margin-bottom: 14px;
 }
 
 .latency-card__total-badge {
-  font-size: 0.8rem;
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  font-weight: 800;
 }
 
 .latency-breakdown {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 10px;
 }
 
 .latency-row {
   display: grid;
-  grid-template-columns: 140px 1fr 65px;
+  grid-template-columns: 190px 1fr 65px;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .latency-row__label {
-  font-size: 0.75rem;
+  font-size: 0.82rem;
   font-weight: 700;
   color: #000000;
+  white-space: nowrap;
 }
 
 .latency-row__bar-track {
-  height: 8px;
-  background: #ffffff;
-  border: 1.5px solid #000000;
-  border-radius: 2px;
+  height: 12px;
+  background: #f1f5f9;
+  border: 2px solid #000000;
+  border-radius: var(--radius-sm);
   overflow: hidden;
 }
 
 .latency-row__bar-fill {
   height: 100%;
-  background: #000000;
-  transition: width 0.3s ease;
+  background: var(--accent-yellow);
+  border-right: 2px solid #000000;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.latency-row__bar-fill--pulse {
+  animation: bar-pulse 1.2s infinite ease-in-out;
+  background: var(--accent-blue);
 }
 
 .latency-row__ms {
   font-family: var(--font-mono);
-  font-size: 0.75rem;
-  font-weight: 700;
+  font-size: 0.78rem;
+  font-weight: 800;
   text-align: right;
+  color: #000000;
 }
 
 /* Empty State */

@@ -5,12 +5,12 @@ interface Props {
 }
 
 const STAGE_LABELS: Record<string, string> = {
-  stt: '🎙️ STT (Sarvam)',
-  guardrail: '🛡️ Safety Guard',
-  embed: '🔢 E5 Embedding',
-  retrieve: '🔍 FAISS + BM25',
-  gate: '🚦 Conf. Gate',
-  generation: '🤖 LLM Gen (Cerebras)',
+  stt: '🎙️ STT (Sarvam AI)',
+  guardrail: '🛡️ Safety Guardrail',
+  embed: '🧠 multilingual-e5 Embed',
+  retrieve: '🔍 FAISS + BM25 Search',
+  gate: '🚦 Confidence Gate',
+  generation: '⚡ Evidence Extraction',
 };
 
 const STAGE_ORDER = ['stt', 'guardrail', 'embed', 'retrieve', 'gate', 'generation'];
@@ -24,7 +24,7 @@ export function LatencyTimer({ timings, total, loading }: Props) {
       <div className="latency-card__header">
         <span className="nb-badge nb-badge--dark">⏱️ LATENCY METRICS</span>
         <span className="nb-badge nb-badge--accent latency-card__total-badge">
-          {loading ? '⏱️ MEASURING...' : `TOTAL: ${totalMs.toFixed(1)} ms`}
+          {loading ? '⏱️ MEASURING...' : `CORE RAG: ${totalMs.toFixed(1)} ms`}
         </span>
       </div>
 
