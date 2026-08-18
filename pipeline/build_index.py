@@ -178,26 +178,32 @@ def load_passages(
         if row_count >= n_rows:
             break
 
+        if row_count == 0:
+            target_lang = row.get("target_lang", "hin_Deva")
+            print(f"[data] Verification on row 0:")
+            print(f"  - target_lang   : {target_lang}")
+            print(f"  - selected field: passages['Translated_passages'] (Hindi Devanagari)")
+            first_trans = row.get("passages", {}).get("Translated_passages", [])
+            if len(first_trans) > 0:
+                print(f"  - sample passage: {str(first_trans[0])[:120]}...\n")
+
         passages_field = row.get("passages", {})
         texts: List[str] = []
         if isinstance(passages_field, dict):
-            texts = (
-                passages_field.get("passage_text")
-                or passages_field.get("Translated_passages")
-                or passages_field.get("English_passages")
-                or []
-            )
+            # Prioritize Translated_passages (explicit Hindi field in ai4bharat/MSMARCO-XI)
+            raw_texts = passages_field.get("Translated_passages")
+            if raw_texts is None or len(raw_texts) == 0:
+                raw_texts = passages_field.get("passage_text") or []
+            texts = list(raw_texts)
         elif isinstance(passages_field, list):
             texts = [
-                p if isinstance(p, str) else (
-                    p.get("passage_text") or p.get("Translated_passages") or "" if isinstance(p, dict) else ""
-                )
+                p.get("Translated_passages") or p.get("passage_text") or "" if isinstance(p, dict) else str(p)
                 for p in passages_field
             ]
 
         for p in texts:
-            if isinstance(p, str):
-                p_stripped = p.strip()
+            if isinstance(p, (str, np.str_)):
+                p_stripped = str(p).strip()
                 if p_stripped and p_stripped not in seen:
                     seen[p_stripped] = None
 
@@ -206,7 +212,7 @@ def load_passages(
             print(f"  ... {row_count}/{n_rows} rows  |  unique passages: {len(seen)}")
 
     unique_passages = list(seen.keys())
-    print(f"\n[data]  Done.  Rows: {row_count}  |  Unique passages: {len(unique_passages)}\n")
+    print(f"\n[data]  Done.  Rows: {row_count}  |  Unique Hindi passages: {len(unique_passages)}\n")
     return unique_passages
 
 

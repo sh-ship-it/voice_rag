@@ -7,7 +7,9 @@ Measures granular per-stage latency and computes `total_rag_core_ms` (graded aga
 from __future__ import annotations
 
 import asyncio
+import json
 import time
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 from pipeline.config import get_settings
@@ -206,13 +208,16 @@ def run_pipeline(
             retrieval_result=retrieval_res,
         )
 
-    # Stage 6: Cerebras Generation (llama-3.3-70b, capped tokens, chunk_id citations)
+    # Stage 6: Pure Extractive Response (Zero-LLM exact evidence extraction)
     t_gen_start = time.perf_counter()
-    gen_res = generate_answer(query, retrieval_res)
+    gen_res = generate_extractive_response(query, retrieval_res)
     gen_ms = (time.perf_counter() - t_gen_start) * 1000.0
 
     rag_core_ms = (time.perf_counter() - t_rag_core_start) * 1000.0
     total_ms = (time.perf_counter() - t_total_start) * 1000.0
+
+    top_chunk = retrieval_res.chunks[0].chunk if retrieval_res.chunks else None
+    evidence_text = (top_chunk.parent_text or top_chunk.text) if top_chunk else None
 
     # Legacy LatencyBreakdown for schema compatibility
     latency_breakdown = LatencyBreakdown(
@@ -224,14 +229,16 @@ def run_pipeline(
         total_pipeline_ms=total_ms,
     )
 
-    return PipelineResponse(
+    response = PipelineResponse(
         query=query,
         transcription=transcription,
         answer=gen_res.answer,
+        evidence_text=evidence_text,
         citations=gen_res.citations,
         confidence=gen_res.confidence,
+        confidence_tier=gen_res.confidence,
         grounded=gen_res.grounded,
-        status="success",
+        status="success" if gen_res.grounded else "low_confidence_fallback",
         total_rag_core_ms=rag_core_ms,
         stt_ms=stt_ms,
         timings={
@@ -246,7 +253,48 @@ def run_pipeline(
         retrieval_result=retrieval_res,
         generation_result=gen_res,
         latency=latency_breakdown,
+        response_mode=gen_res.response_mode or "extractive",
+        fallback_reason=gen_res.fallback_reason,
     )
+    _write_eval_log(response, retrieval_res)
+    return response
+
+
+def _write_eval_log(response: "PipelineResponse", retrieval_res: Optional["RetrievalResult"]) -> None:
+    """Append a JSONL row to logs/eval_log.jsonl with all retrieval scores and latencies.
+
+    Per architecture doc: Save the query, retrieved IDs, dense scores, BM25 scores,
+    RRF scores, reranker scores, final citations, answer, and latency for every test query.
+    """
+    try:
+        log_path = Path("logs") / "eval_log.jsonl"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Collect per-chunk retrieval debug info
+        chunk_debug: List[Dict] = []
+        if retrieval_res and retrieval_res.chunks:
+            for sc in retrieval_res.chunks:
+                chunk_debug.append({
+                    "chunk_id": sc.chunk.chunk_id,
+                    "rrf_score": sc.score,
+                    "rank": sc.rank,
+                    "strategy": sc.chunk.chunk_strategy,
+                })
+
+        row = {
+            "query": response.query,
+            "answer": response.answer,
+            "final_citations": response.citations,
+            "confidence": response.confidence,
+            "grounded": response.grounded,
+            "status": response.status,
+            "retrieved_chunks": chunk_debug,
+            "latency_ms": response.timings,
+        }
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    except Exception:
+        pass  # Never let logging failure break the pipeline
 
 
 async def arun_pipeline(
@@ -368,12 +416,18 @@ async def arun_pipeline(
         rag_core_ms = (time.perf_counter() - t_rag_core_start) * 1000.0
         total_ms = (time.perf_counter() - t_total_start) * 1000.0
         low_conf_text = REFUSAL_LOW_CONFIDENCE_HINDI if is_hindi else REFUSAL_LOW_CONFIDENCE_ENGLISH
+        
+        top_chunk = retrieval_res.chunks[0].chunk if retrieval_res.chunks else None
+        evidence_text = (top_chunk.parent_text or top_chunk.text) if top_chunk else None
+
         return PipelineResponse(
             query=query,
             transcription=transcription,
             answer=low_conf_text,
+            evidence_text=evidence_text,
             citations=[],
             confidence="low",
+            confidence_tier="low",
             grounded=False,
             status="low_confidence_fallback",
             total_rag_core_ms=rag_core_ms,
@@ -390,13 +444,16 @@ async def arun_pipeline(
             retrieval_result=retrieval_res,
         )
 
-    # Async Cerebras generation
+    # Async Generation (Groq fast-inference or Cerebras fallback)
     t_gen_start = time.perf_counter()
     gen_res = await agenerate_answer(query, retrieval_res)
     gen_ms = (time.perf_counter() - t_gen_start) * 1000.0
 
     rag_core_ms = (time.perf_counter() - t_rag_core_start) * 1000.0
     total_ms = (time.perf_counter() - t_total_start) * 1000.0
+
+    top_chunk = retrieval_res.chunks[0].chunk if retrieval_res.chunks else None
+    evidence_text = (top_chunk.parent_text or top_chunk.text) if top_chunk else None
 
     latency_breakdown = LatencyBreakdown(
         stt_ms=stt_ms,
@@ -407,12 +464,14 @@ async def arun_pipeline(
         total_pipeline_ms=total_ms,
     )
 
-    return PipelineResponse(
+    response = PipelineResponse(
         query=query,
         transcription=transcription,
         answer=gen_res.answer,
+        evidence_text=evidence_text,
         citations=gen_res.citations,
         confidence=gen_res.confidence,
+        confidence_tier=gen_res.confidence,
         grounded=gen_res.grounded,
         status="success",
         total_rag_core_ms=rag_core_ms,
@@ -429,6 +488,8 @@ async def arun_pipeline(
         retrieval_result=retrieval_res,
         generation_result=gen_res,
         latency=latency_breakdown,
+        response_mode=gen_res.response_mode,
+        fallback_reason=gen_res.fallback_reason,
     )
 
 

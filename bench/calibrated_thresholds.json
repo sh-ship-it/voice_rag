@@ -1,0 +1,12 @@
+{
+  "n_queries": 200,
+  "hit_at_5": 155,
+  "hit_at_20": 175,
+  "hit_rate_5": 0.775,
+  "hit_rate_20": 0.875,
+  "recommended": {
+    "CONFIDENCE_THRESHOLD_ANSWER": 0.03055,
+    "CONFIDENCE_THRESHOLD_CAUTIOUS": 0.026571,
+    "CONFIDENCE_THRESHOLD_REFUSE": 0.0186
+  }
+}

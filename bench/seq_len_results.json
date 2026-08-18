@@ -1,0 +1,29 @@
+{
+  "results": [
+    {
+      "max_seq_length": 32,
+      "n_queries": 200,
+      "avg_embed_ms": 26.59,
+      "p95_embed_ms": 34.96,
+      "recall@5": 0.68,
+      "recall@20": 0.815
+    },
+    {
+      "max_seq_length": 128,
+      "n_queries": 200,
+      "avg_embed_ms": 23.08,
+      "p95_embed_ms": 26.23,
+      "recall@5": 0.68,
+      "recall@20": 0.815
+    },
+    {
+      "max_seq_length": 256,
+      "n_queries": 200,
+      "avg_embed_ms": 23.56,
+      "p95_embed_ms": 27.87,
+      "recall@5": 0.68,
+      "recall@20": 0.815
+    }
+  ],
+  "recommended_seq_len": 32
+}

@@ -101,6 +101,15 @@ class GenerationResult(BaseModel):
     total_tokens: Optional[int] = Field(default=None, description="Total tokens consumed")
     latency_ms: float = Field(default=0.0, description="Generation latency in milliseconds")
     finish_reason: Optional[str] = Field(default=None, description="Generation termination reason")
+    # Generation routing metadata (optional — existing clients that omit these fields are unaffected)
+    response_mode: Optional[str] = Field(
+        default=None,
+        description="Generation path taken: 'groq_generated' | 'extractive_fallback' | 'refusal' | 'cerebras_generated'"
+    )
+    fallback_reason: Optional[str] = Field(
+        default=None,
+        description="Reason for extractive fallback activation, e.g. 'timeout', 'malformed_json', 'missing_groq_key', 'invalid_citations', 'empty_answer'"
+    )
 
     @property
     def generated_text(self) -> str:
@@ -136,7 +145,11 @@ class PipelineResponse(BaseModel):
         default=None,
         description="Speech-to-text transcript if input was audio"
     )
-    answer: str = Field(description="Generated response answer text")
+    answer: str = Field(description="Extracted response answer text")
+    evidence_text: Optional[str] = Field(
+        default=None,
+        description="Exact full supporting passage text from retrieved evidence"
+    )
     citations: List[str] = Field(
         default_factory=list,
         description="List of cited chunk_ids supporting the answer"
@@ -144,6 +157,10 @@ class PipelineResponse(BaseModel):
     confidence: Literal["high", "medium", "low"] = Field(
         default="medium",
         description="Confidence assessment based on retrieval grounding"
+    )
+    confidence_tier: Optional[str] = Field(
+        default="medium",
+        description="Calibrated confidence tier: 'high' | 'medium' | 'low'"
     )
     grounded: bool = Field(
         default=True,
@@ -187,4 +204,13 @@ class PipelineResponse(BaseModel):
     timestamp: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         description="Timestamp of pipeline response generation"
+    )
+    # Generation routing metadata (optional — existing clients are unaffected)
+    response_mode: Optional[str] = Field(
+        default=None,
+        description="Generation path taken: 'groq_generated' | 'extractive_fallback' | 'refusal' | 'cerebras_generated'"
+    )
+    fallback_reason: Optional[str] = Field(
+        default=None,
+        description="Reason for extractive fallback if response_mode is 'extractive_fallback'"
     )

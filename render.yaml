@@ -1,0 +1,47 @@
+services:
+  # ──────────────────────────────────────────────────────────
+  # Backend — FastAPI Web Service
+  # Per HHGOA Task 2 architecture document, Render table
+  # ──────────────────────────────────────────────────────────
+  - type: web
+    name: hhgoa-backend
+    runtime: python
+    # Run from repo root so pipeline/ module is importable without path hacks
+    rootDir: .
+    buildCommand: pip install -r backend/requirements.txt
+    # NOTE: On a fresh deploy the FAISS/BM25 index files in /index/ won't exist
+    # (they are gitignored). The pipeline auto-falls back to a 15-chunk in-memory
+    # demo index. To serve the full 91k-chunk index, upload the index/ artifacts
+    # as a Render Disk or pre-build them in a build step.
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: SARVAM_API_KEY
+        sync: false          # Set manually in Render dashboard
+      - key: CEREBRAS_API_KEY
+        sync: false
+      - key: HF_TOKEN
+        sync: false          # For HuggingFace dataset access during index builds
+      - key: FRONTEND_URL
+        sync: false          # Set to the Render static site URL after deploy
+      - key: CONFIDENCE_THRESHOLD_ANSWER
+        sync: false          # Set after running bench/calibrate_threshold.py
+      - key: CONFIDENCE_THRESHOLD_CAUTIOUS
+        sync: false
+      - key: CONFIDENCE_THRESHOLD_REFUSE
+        sync: false
+      - key: ENABLE_RERANK
+        value: "true"
+
+  # ──────────────────────────────────────────────────────────
+  # Frontend — React + Vite Static Site
+  # Per HHGOA Task 2 architecture document, Render table
+  # ──────────────────────────────────────────────────────────
+  - type: static
+    name: hhgoa-frontend
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    envVars:
+      - key: VITE_API_URL
+        value: https://hhgoa-backend.onrender.com   # Update after backend deploy

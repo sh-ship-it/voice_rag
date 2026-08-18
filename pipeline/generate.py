@@ -1,485 +1,185 @@
-"""LLM Generation module using Cerebras Cloud Fast Inference API (OpenAI-compatible).
+"""Pure Extractive RAG Generation Module.
 
-Optimized for ultra-low latency (<200ms end-to-end post-STT) with capped token output (100-120 tokens),
-strict JSON schema formatting, chunk_id citation tracking, and resilient retry/fallback logic.
+Zero LLM calls. The answer is extracted directly and verbatim from the top retrieved
+and reranked dataset evidence. Preserves verified citations and calibrated confidence tiers.
 """
 
 from __future__ import annotations
 
-import json
-import random
+import re
 import time
-from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional, Tuple
 
-from openai import APIConnectionError, APIError, APITimeoutError, AsyncOpenAI, OpenAI
-
-from pipeline.config import get_settings
+from pipeline.confidence import compute_evidence_score, ConfidenceResult
 from pipeline.schemas import GenerationResult, RetrievalResult, ScoredChunk
 
-# ---------------------------------------------------------------------------
-# Default Constants & Latency Budgets
-# ---------------------------------------------------------------------------
+REFUSAL_TEXT_HINDI = "क्षमा करें, इस विषय पर उपलब्ध ज्ञानकोष में पर्याप्त जानकारी नहीं मिली।"
+REFUSAL_TEXT_ENGLISH = "I'm sorry, there is not enough relevant information in the knowledge base to answer this question."
 
-DEFAULT_MAX_TOKENS = 120  # Strict latency constraint: capped tokens for rapid turnaround
-DEFAULT_TIMEOUT_SECONDS = 5.0  # Allow network roundtrip to Cerebras Cloud API
-DEFAULT_MODEL = "llama-3.3-70b"
-
-FALLBACK_ANSWER_HINDI = "सिस्टम वर्तमान में व्यस्त है, कृपया कुछ समय बाद पुनः प्रयास करें।"
-FALLBACK_ANSWER_ENGLISH = "The system is currently busy. Please try again shortly."
+_SENTENCE_SPLIT_REGEX = re.compile(r"(?<=[.!?।])\s+|(?<=[.!?।])$")
 
 
-# ---------------------------------------------------------------------------
-# Prompt Engineering with Numbered Context and chunk_id Citations
-# ---------------------------------------------------------------------------
-
-SYSTEM_PROMPT = """You are a precise, low-latency, voice-enabled assistant answering questions in Hindi, Hinglish, or English based on the language of the user query.
-
-Strict Rules:
-1. Answer ONLY using the facts present in the provided numbered Context Chunks.
-2. Keep your answer EXTREMELY short and direct (1 to 2 sentences maximum, strictly under 70 words).
-3. Include the exact `chunk_id` for every fact used in the `citations` list.
-4. If the provided context does NOT contain enough information to answer the question accurately, you MUST set:
-   - "grounded": false
-   - "confidence": "low"
-   - "citations": []
-   - "answer": State politely that the provided context does not have this information.
-5. Respond strictly in valid JSON format matching this schema:
-{
-  "answer": "string (concise 1-2 sentence response)",
-  "citations": ["chunk_id_1", "chunk_id_2"],
-  "confidence": "high" | "medium" | "low",
-  "grounded": true | false
-}"""
+def split_into_sentences(text: str) -> List[str]:
+    """Split Hindi and English text into individual sentences cleanly."""
+    if not text:
+        return []
+    raw_sentences = _SENTENCE_SPLIT_REGEX.split(text.strip())
+    cleaned = []
+    for s in raw_sentences:
+        s_clean = s.strip()
+        if len(s_clean) >= 6:
+            cleaned.append(s_clean)
+    return cleaned if cleaned else [text.strip()]
 
 
-def format_context_prompt(query: str, chunks: List[ScoredChunk]) -> str:
-    """Format retrieved context chunks with explicit chunk_ids and user query."""
-    if not chunks:
-        return f"Context Chunks:\n(No relevant context retrieved)\n\nUser Question: {query}"
-
-    context_lines = ["Context Chunks:"]
-    for idx, sc in enumerate(chunks, start=1):
-        c = sc.chunk
-        cid = c.chunk_id
-        strat = f" [{c.chunk_strategy}]" if c.chunk_strategy else ""
-        context_lines.append(f"[{idx}] (chunk_id: \"{cid}\"{strat})\n{c.text.strip()}\n")
-
-    context_block = "\n".join(context_lines)
-    return f"{context_block}\nUser Question: {query}\n\nProvide the JSON response:"
-
-
-# ---------------------------------------------------------------------------
-# Helper: Parse & Validate JSON
-# ---------------------------------------------------------------------------
-
-def _parse_generation_json(raw_content: str, model_name: str, generation_ms: float) -> Optional[GenerationResult]:
-    """Parse JSON string into GenerationResult, handling markdown blocks if present."""
-    clean = raw_content.strip()
-    if clean.startswith("```json"):
-        clean = clean[7:]
-    if clean.startswith("```"):
-        clean = clean[3:]
-    if clean.endswith("```"):
-        clean = clean[:-3]
-    clean = clean.strip()
-
-    try:
-        data = json.loads(clean)
-        answer = str(data.get("answer", "")).strip()
-        raw_citations = data.get("citations", [])
-        citations = [str(c).strip() for c in raw_citations if str(c).strip()] if isinstance(raw_citations, list) else []
-
-        raw_conf = str(data.get("confidence", "medium")).lower()
-        confidence: Literal["high", "medium", "low"] = "medium"
-        if raw_conf in ("high", "medium", "low"):
-            confidence = raw_conf  # type: ignore
-
-        grounded = bool(data.get("grounded", True))
-        if not answer or not citations:
-            # If citations are empty or answer is empty, groundness is uncertain
-            if not citations:
-                grounded = data.get("grounded", False)
-
-        return GenerationResult(
-            answer=answer,
-            citations=citations,
-            confidence=confidence,
-            grounded=grounded,
-            generation_ms=generation_ms,
-            latency_ms=generation_ms,
-            model_name=model_name,
-        )
-    except Exception:
-        return None
-
-
-def _clean_concise_snippet(raw_text: str, max_words: int = 30) -> str:
-    """Deduplicate sentences and return a clean, crisp 1-2 sentence response."""
-    parts = [s.strip() for s in raw_text.replace("।", "।\n").replace(". ", ".\n").replace("? ", "?\n").split("\n") if s.strip()]
-    seen = set()
-    unique_sentences = []
-    for s in parts:
-        normalized = s.lower().replace(" ", "")
-        if normalized not in seen and len(s) > 5:
-            seen.add(normalized)
-            unique_sentences.append(s)
-        if len(unique_sentences) >= 2:
-            break
-
-    joined = " ".join(unique_sentences) if unique_sentences else raw_text.strip()
-    words = joined.split()
-    if len(words) > max_words:
-        joined = " ".join(words[:max_words]) + ("..." if not joined.endswith("।") else "")
-    return joined
-
-
-# ---------------------------------------------------------------------------
-# Core Generation Functions
-# ---------------------------------------------------------------------------
-
-def generate_answer(
+def select_best_evidence_sentence(
     query: str,
-    retrieval_result: RetrievalResult,
-    api_key: Optional[str] = None,
-    base_url: Optional[str] = None,
-    model: Optional[str] = None,
-    timeout_s: float = DEFAULT_TIMEOUT_SECONDS,
-    max_tokens: int = DEFAULT_MAX_TOKENS,
-    client: Optional[OpenAI] = None,
-) -> GenerationResult:
-    """Generate a concise, citation-grounded answer via Cerebras Inference API.
-
-    Features
-    --------
-    - 180ms strict API timeout.
-    - 1 retry with exponential backoff + jitter on timeout or malformed JSON.
-    - Full call timing (request sent -> complete response parsed) saved as ``generation_ms``.
-    - Fallback GenerationResult on failure without raising exceptions.
-    - If model returns ``grounded=False`` or empty citations, returns as-is.
-
-    Parameters
-    ----------
-    query:
-        The search or voice question string.
-    retrieval_result:
-        Output from hybrid retrieval containing top scored chunks.
-    api_key:
-        Cerebras API key (defaults to CEREBRAS_API_KEY from environment).
-    base_url:
-        Base URL for OpenAI-compatible endpoint (default: https://api.cerebras.ai/v1).
-    model:
-        Model name (default: llama-3.3-70b).
-    timeout_s:
-        Per-request timeout in seconds (default: 0.180).
-    max_tokens:
-        Max token budget for completion (default: 120).
-    client:
-        Optional pre-constructed OpenAI client instance.
+    ranked_chunks: List[ScoredChunk],
+    max_sentences: int = 2,
+) -> Optional[Tuple[str, str, str]]:
+    """Extract the best supporting sentence(s) and full passage from top ranked chunks.
 
     Returns
     -------
-    GenerationResult
-        Structured output containing answer, citations, confidence, grounded, and generation_ms.
+    Optional[Tuple[answer_sentence, full_evidence_text, primary_chunk_id]]
     """
-    settings = get_settings()
-    use_sarvam = (settings.llm_provider == "sarvam") or (not settings.cerebras_api_key and bool(settings.sarvam_api_key))
-    key = api_key or (settings.sarvam_api_key if use_sarvam else (settings.cerebras_api_key or settings.sarvam_api_key))
-    url = base_url or (settings.sarvam_base_url if use_sarvam else settings.cerebras_base_url)
-    model_name = model or (settings.sarvam_llm_model if use_sarvam else (settings.cerebras_model or DEFAULT_MODEL))
+    if not ranked_chunks:
+        return None
 
-    # Fallback if no API key configured
-    if not key:
-        is_hindi = any("\u0900" <= c <= "\u097f" for c in query)
-        fallback_msg = (
-            "API कुंजी कॉन्फ़िगर नहीं है।" if is_hindi
-            else "LLM API key is not configured in .env."
-        )
-        return GenerationResult(
-            answer=fallback_msg,
-            citations=[],
-            confidence="low",
-            grounded=False,
-            generation_ms=0.0,
-            latency_ms=0.0,
-            model_name=model_name,
-        )
+    top_sc = ranked_chunks[0]
+    top_chunk = top_sc.chunk
+    full_text = top_chunk.text.strip()
+    chunk_id = top_chunk.chunk_id
 
-    llm_client = client or OpenAI(
-        base_url=url,
-        api_key=key,
-        timeout=timeout_s,
-        max_retries=0,  # We manage our own low-latency retry loop
-    )
+    # If small_to_big has parent_text, use parent for full evidence
+    full_evidence = top_chunk.parent_text.strip() if top_chunk.parent_text else full_text
 
-    user_prompt = format_context_prompt(query, retrieval_result.chunks)
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": user_prompt},
-    ]
+    # Extract sentences from the top chunk
+    sentences = split_into_sentences(full_text)
+    if not sentences:
+        return full_text, full_evidence, chunk_id
 
-    t_start = time.perf_counter()
-    attempts = 2  # 1 initial attempt + 1 retry
+    # Compute keyword overlap score with query tokens
+    query_tokens = set(re.findall(r"\w+", query.lower()))
+    scored_sentences = []
 
-    effective_max_tokens = min(max_tokens or DEFAULT_MAX_TOKENS, 120)
+    for idx, sent in enumerate(sentences):
+        sent_tokens = set(re.findall(r"\w+", sent.lower()))
+        overlap = len(query_tokens.intersection(sent_tokens))
+        # Bias slightly towards the first sentence if ties occur
+        pos_bias = 0.5 / (idx + 1.0)
+        scored_sentences.append((overlap + pos_bias, idx, sent))
 
-    for attempt in range(attempts):
-        try:
-            call_kwargs = {
-                "model": model_name,
-                "messages": messages,
-                "max_tokens": effective_max_tokens,
-                "temperature": 0.1,
-            }
-            if not use_sarvam:
-                call_kwargs["response_format"] = {"type": "json_object"}
+    scored_sentences.sort(key=lambda x: x[0], reverse=True)
 
-            response = llm_client.chat.completions.create(**call_kwargs)
+    # Pick top 1-2 most informative sentences
+    selected = [scored_sentences[0][2]]
+    if max_sentences > 1 and len(scored_sentences) > 1 and scored_sentences[1][0] > 0.5:
+        idx1, idx2 = scored_sentences[0][1], scored_sentences[1][1]
+        if abs(idx1 - idx2) == 1:
+            if idx1 < idx2:
+                selected = [scored_sentences[0][2], scored_sentences[1][2]]
+            else:
+                selected = [scored_sentences[1][2], scored_sentences[0][2]]
+        else:
+            selected.append(scored_sentences[1][2])
 
-            generation_ms = (time.perf_counter() - t_start) * 1000.0
-            choice = response.choices[0]
-            raw_content = choice.message.content or ""
-
-            result = _parse_generation_json(raw_content, model_name, generation_ms)
-            if result is not None:
-                # Populate token stats if available
-                if response.usage:
-                    result.prompt_tokens = response.usage.prompt_tokens
-                    result.completion_tokens = response.usage.completion_tokens
-                    result.total_tokens = response.usage.total_tokens
-                result.finish_reason = choice.finish_reason
-                return result
-
-            # Malformed JSON -> retry if attempts remaining
-            if attempt < attempts - 1:
-                time.sleep(0.015 + random.uniform(0, 0.010))
-                continue
-
-        except (APITimeoutError, APIConnectionError, APIError, Exception) as e:
-            if attempt < attempts - 1:
-                # Backoff with jitter before single retry (15ms - 30ms)
-                time.sleep(0.020 + random.uniform(0, 0.015))
-                continue
-
-    # If external API failed/quota exhausted, use high-precision extractive grounding from top chunk
-    total_ms = (time.perf_counter() - t_start) * 1000.0
-    if retrieval_result and retrieval_result.chunks:
-        top_sc = retrieval_result.chunks[0]
-        c = top_sc.chunk
-        concise_ans = _clean_concise_snippet(c.text, max_words=30)
-        return GenerationResult(
-            answer=concise_ans,
-            citations=[c.chunk_id],
-            confidence="high",
-            grounded=True,
-            generation_ms=total_ms,
-            latency_ms=total_ms,
-            model_name=f"{model_name}-fallback",
-        )
-
-    is_hindi_query = any("\u0900" <= c <= "\u097f" for c in query)
-    fallback_text = FALLBACK_ANSWER_HINDI if is_hindi_query else FALLBACK_ANSWER_ENGLISH
-
-    return GenerationResult(
-        answer=fallback_text,
-        citations=[],
-        confidence="low",
-        grounded=False,
-        generation_ms=total_ms,
-        latency_ms=total_ms,
-        model_name=model_name,
-    )
+    answer_text = " ".join(selected).strip()
+    return answer_text, full_evidence, chunk_id
 
 
-async def agenerate_answer(
+def generate_extractive_response(
     query: str,
     retrieval_result: RetrievalResult,
-    api_key: Optional[str] = None,
-    base_url: Optional[str] = None,
-    model: Optional[str] = None,
-    timeout_s: float = DEFAULT_TIMEOUT_SECONDS,
-    max_tokens: int = DEFAULT_MAX_TOKENS,
-    client: Optional[AsyncOpenAI] = None,
 ) -> GenerationResult:
-    """Asynchronous variant of generate_answer for FastAPI / async pipeline execution."""
-    import asyncio
+    """Generate pure extractive response directly from retrieved evidence.
 
-    settings = get_settings()
-    use_sarvam = (settings.llm_provider == "sarvam") or (not settings.cerebras_api_key and bool(settings.sarvam_api_key))
-    key = api_key or (settings.sarvam_api_key if use_sarvam else (settings.cerebras_api_key or settings.sarvam_api_key))
-    url = base_url or (settings.sarvam_base_url if use_sarvam else settings.cerebras_base_url)
-    model_name = model or (settings.sarvam_llm_model if use_sarvam else (settings.cerebras_model or DEFAULT_MODEL))
+    1. Computes multi-feature calibrated evidence score from retrieval signals.
+    2. If decision is 'refuse', returns grounded refusal response.
+    3. Selects the most relevant exact sentence from top reranked chunks.
+    4. Sets confidence_tier ('high' | 'cautious' | 'low') and response_mode='extractive'.
+    """
+    t_start = time.perf_counter()
+    ranked_chunks = retrieval_result.chunks if retrieval_result else []
 
-    if not key:
-        is_hindi = any("\u0900" <= c <= "\u097f" for c in query)
-        fallback_msg = (
-            "API कुंजी कॉन्फ़िगर नहीं है।" if is_hindi
-            else "LLM API key is not configured in .env."
-        )
+    is_hindi = any("\u0900" <= c <= "\u097f" for c in query)
+    refusal_msg = REFUSAL_TEXT_HINDI if is_hindi else REFUSAL_TEXT_ENGLISH
+
+    if not ranked_chunks:
+        dur_ms = (time.perf_counter() - t_start) * 1000.0
         return GenerationResult(
-            answer=fallback_msg,
+            answer=refusal_msg,
             citations=[],
             confidence="low",
             grounded=False,
-            generation_ms=0.0,
-            latency_ms=0.0,
-            model_name=model_name,
+            generation_ms=dur_ms,
+            latency_ms=dur_ms,
+            model_name="extractive-verbatim",
+            response_mode="refusal",
+            fallback_reason="empty_retrieval",
         )
 
-    llm_client = client or AsyncOpenAI(
-        base_url=url,
-        api_key=key,
-        timeout=timeout_s,
-        max_retries=0,
-    )
+    # Phase 3 Multi-Feature Confidence Estimation
+    conf_res: ConfidenceResult = compute_evidence_score(query, retrieval_result)
 
-    user_prompt = format_context_prompt(query, retrieval_result.chunks)
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": user_prompt},
-    ]
-
-    t_start = time.perf_counter()
-    attempts = 2
-    effective_max_tokens = min(max_tokens or DEFAULT_MAX_TOKENS, 120)
-
-    for attempt in range(attempts):
-        try:
-            call_kwargs = {
-                "model": model_name,
-                "messages": messages,
-                "max_tokens": effective_max_tokens,
-                "temperature": 0.1,
-            }
-            if not use_sarvam:
-                call_kwargs["response_format"] = {"type": "json_object"}
-
-            response = await llm_client.chat.completions.create(**call_kwargs)
-
-            generation_ms = (time.perf_counter() - t_start) * 1000.0
-            choice = response.choices[0]
-            raw_content = choice.message.content or ""
-
-            result = _parse_generation_json(raw_content, model_name, generation_ms)
-            if result is not None:
-                if response.usage:
-                    result.prompt_tokens = response.usage.prompt_tokens
-                    result.completion_tokens = response.usage.completion_tokens
-                    result.total_tokens = response.usage.total_tokens
-                result.finish_reason = choice.finish_reason
-                return result
-
-            if attempt < attempts - 1:
-                await asyncio.sleep(0.015 + random.uniform(0, 0.010))
-                continue
-
-        except (APITimeoutError, APIConnectionError, APIError, Exception):
-            if attempt < attempts - 1:
-                await asyncio.sleep(0.020 + random.uniform(0, 0.015))
-                continue
-
-    # If external API failed/quota exhausted, use high-precision extractive grounding from top chunk
-    total_ms = (time.perf_counter() - t_start) * 1000.0
-    if retrieval_result and retrieval_result.chunks:
-        top_sc = retrieval_result.chunks[0]
-        c = top_sc.chunk
-        concise_ans = _clean_concise_snippet(c.text, max_words=30)
+    if conf_res.decision == "refuse":
+        dur_ms = (time.perf_counter() - t_start) * 1000.0
         return GenerationResult(
-            answer=concise_ans,
-            citations=[c.chunk_id],
-            confidence="high",
-            grounded=True,
-            generation_ms=total_ms,
-            latency_ms=total_ms,
-            model_name=f"{model_name}-fallback",
+            answer=refusal_msg,
+            citations=[],
+            confidence="low",
+            grounded=False,
+            generation_ms=dur_ms,
+            latency_ms=dur_ms,
+            model_name="extractive-verbatim",
+            response_mode="refusal",
+            fallback_reason=f"low_evidence_score:{conf_res.evidence_score:.3f}",
         )
 
-    is_hindi_query = any("\u0900" <= c <= "\u097f" for c in query)
-    fallback_text = FALLBACK_ANSWER_HINDI if is_hindi_query else FALLBACK_ANSWER_ENGLISH
+    extracted = select_best_evidence_sentence(query, ranked_chunks, max_sentences=2)
+    if not extracted:
+        dur_ms = (time.perf_counter() - t_start) * 1000.0
+        return GenerationResult(
+            answer=refusal_msg,
+            citations=[],
+            confidence="low",
+            grounded=False,
+            generation_ms=dur_ms,
+            latency_ms=dur_ms,
+            model_name="extractive-verbatim",
+            response_mode="refusal",
+            fallback_reason="no_sentence_extracted",
+        )
+
+    answer_sentence, full_evidence, primary_cid = extracted
+
+    # Collect top 1-3 verified citation chunk_ids
+    citations = [sc.chunk.chunk_id for sc in ranked_chunks[:3]]
+    if primary_cid not in citations:
+        citations.insert(0, primary_cid)
+    citations = citations[:3]
+
+    dur_ms = (time.perf_counter() - t_start) * 1000.0
+    mapped_conf: Literal["high", "medium", "low"] = "high" if conf_res.confidence_tier == "high" else "medium"
 
     return GenerationResult(
-        answer=fallback_text,
-        citations=[],
-        confidence="low",
-        grounded=False,
-        generation_ms=total_ms,
-        latency_ms=total_ms,
-        model_name=model_name,
+        answer=answer_sentence,
+        citations=citations,
+        confidence=mapped_conf,
+        grounded=True,
+        generation_ms=dur_ms,
+        latency_ms=dur_ms,
+        model_name="extractive-verbatim",
+        response_mode="extractive",
     )
 
 
-# ---------------------------------------------------------------------------
-# Class-based Generator interface
-# ---------------------------------------------------------------------------
-
-class BaseGenerator(ABC):
-    """Abstract base class for LLM response generation."""
-
-    @abstractmethod
-    def generate(
-        self,
-        query: str,
-        retrieval_result: RetrievalResult,
-    ) -> GenerationResult:
-        """Generate an answer given user query and retrieved context."""
-        raise NotImplementedError
-
-    @abstractmethod
-    async def agenerate(
-        self,
-        query: str,
-        retrieval_result: RetrievalResult,
-    ) -> GenerationResult:
-        """Asynchronously generate an answer given user query and retrieved context."""
-        raise NotImplementedError
+# Backward compatibility aliases
+def generate_answer(query: str, retrieval_result: RetrievalResult) -> GenerationResult:
+    """Synchronous extractive generation entry point."""
+    return generate_extractive_response(query, retrieval_result)
 
 
-class CerebrasGenerator(BaseGenerator):
-    """Cerebras Fast Inference generator wrapper."""
-
-    def __init__(
-        self,
-        api_key: Optional[str] = None,
-        base_url: Optional[str] = None,
-        model: Optional[str] = None,
-        timeout_s: float = DEFAULT_TIMEOUT_SECONDS,
-        max_tokens: int = DEFAULT_MAX_TOKENS,
-    ) -> None:
-        self.settings = get_settings()
-        self.api_key = api_key or self.settings.cerebras_api_key
-        self.base_url = base_url or self.settings.cerebras_base_url
-        self.model = model or self.settings.cerebras_model or DEFAULT_MODEL
-        self.timeout_s = timeout_s
-        self.max_tokens = max_tokens
-
-    def generate(
-        self,
-        query: str,
-        retrieval_result: RetrievalResult,
-    ) -> GenerationResult:
-        """Execute synchronous grounded answer generation."""
-        return generate_answer(
-            query=query,
-            retrieval_result=retrieval_result,
-            api_key=self.api_key,
-            base_url=self.base_url,
-            model=self.model,
-            timeout_s=self.timeout_s,
-            max_tokens=self.max_tokens,
-        )
-
-    async def agenerate(
-        self,
-        query: str,
-        retrieval_result: RetrievalResult,
-    ) -> GenerationResult:
-        """Execute asynchronous grounded answer generation."""
-        return await agenerate_answer(
-            query=query,
-            retrieval_result=retrieval_result,
-            api_key=self.api_key,
-            base_url=self.base_url,
-            model=self.model,
-            timeout_s=self.timeout_s,
-            max_tokens=self.max_tokens,
-        )
+async def agenerate_answer(query: str, retrieval_result: RetrievalResult) -> GenerationResult:
+    """Asynchronous extractive generation entry point."""
+    return generate_extractive_response(query, retrieval_result)

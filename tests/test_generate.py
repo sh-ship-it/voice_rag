@@ -47,7 +47,7 @@ class TestGeneratePrompt:
 
     def test_format_context_prompt_empty_chunks(self):
         prompt = format_context_prompt("Test question", [])
-        assert "No relevant context retrieved" in prompt
+        assert "No relevant evidence retrieved" in prompt
         assert "User Question: Test question" in prompt
 
 
@@ -90,16 +90,16 @@ class TestGenerateJsonParsing:
 
 class TestGenerateAnswerExecution:
     def test_fallback_without_api_key(self):
+        """With no keys and no retrieved chunks, the result is an empty extractive fallback."""
         res = generate_answer(
             query="भारत की राजधानी क्या है?",
             retrieval_result=RetrievalResult(query="test", chunks=[]),
             api_key=None,
         )
         assert isinstance(res, GenerationResult)
+        # With empty retrieval, extractive fallback returns empty answer
         assert res.grounded is False
-        assert res.confidence == "low"
-        assert res.citations == []
-        assert len(res.answer) > 0
+        assert res.response_mode in ("extractive_fallback", "refusal")
 
     def test_mock_successful_generation(self):
         mock_client = MagicMock()
@@ -148,6 +148,7 @@ class TestGenerateAnswerExecution:
         assert res.generation_ms > 0.0
 
     def test_mock_timeout_fallback(self):
+        """When Cerebras client (injected mock) times out with no chunks, returns empty extractive fallback."""
         from openai import APITimeoutError
         mock_client = MagicMock()
         mock_client.chat.completions.create.side_effect = APITimeoutError(request=MagicMock())
@@ -162,8 +163,9 @@ class TestGenerateAnswerExecution:
         assert isinstance(res, GenerationResult)
         assert res.grounded is False
         assert res.confidence == "low"
-        assert "busy" in res.answer.lower()
-        assert res.generation_ms >= 0.0
+        # Empty retrieval + timeout → empty extractive fallback (no chunks to extract from)
+        assert res.response_mode == "extractive_fallback"
+        assert res.fallback_reason == "cerebras_failure"
 
     def test_cerebras_generator_class(self):
         gen = CerebrasGenerator(api_key=None)

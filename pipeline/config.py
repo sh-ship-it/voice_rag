@@ -1,4 +1,4 @@
-"""Configuration loading and validation for the Voice RAG system."""
+"""Configuration loading and validation for the Pure Extractive Voice RAG system."""
 
 import os
 from functools import lru_cache
@@ -21,36 +21,8 @@ class Settings(BaseSettings):
         case_sensitive=False
     )
 
-    # API Keys
+    # Speech-to-Text API Key (Sarvam AI saaras:v3)
     sarvam_api_key: Optional[str] = Field(default=None, alias="SARVAM_API_KEY")
-    cerebras_api_key: Optional[str] = Field(default=None, alias="CEREBRAS_API_KEY")
-    hf_token: Optional[str] = Field(default=None, alias="HF_TOKEN")
-
-    # Pipeline Model Configurations
-    embedding_model_name: str = Field(
-        default="intfloat/multilingual-e5-small",
-        alias="EMBEDDING_MODEL_NAME"
-    )
-    llm_provider: str = Field(
-        default="cerebras",
-        alias="LLM_PROVIDER"
-    )
-    cerebras_model: str = Field(
-        default="llama3.1-8b",
-        alias="CEREBRAS_MODEL"
-    )
-    cerebras_base_url: str = Field(
-        default="https://api.cerebras.ai/v1",
-        alias="CEREBRAS_BASE_URL"
-    )
-    max_tokens: int = Field(
-        default=120,
-        alias="MAX_TOKENS"
-    )
-    sarvam_llm_model: str = Field(
-        default="sarvam-105b-conversations",
-        alias="SARVAM_LLM_MODEL"
-    )
     sarvam_base_url: str = Field(
         default="https://api.sarvam.ai/v1",
         alias="SARVAM_BASE_URL"
@@ -59,14 +31,36 @@ class Settings(BaseSettings):
         default="hi-IN",
         alias="SARVAM_LANGUAGE_CODE"
     )
+    hf_token: Optional[str] = Field(default=None, alias="HF_TOKEN")
+
+    # Response Policy (Pure Extractive)
+    answer_mode: str = Field(
+        default="extractive",
+        alias="ANSWER_MODE",
+        description="Response mode: 'extractive' (zero LLM calls, verbatim evidence extraction)"
+    )
+    max_evidence_sentences: int = Field(
+        default=2,
+        alias="MAX_EVIDENCE_SENTENCES"
+    )
+    enable_rerank: bool = Field(
+        default=True,
+        alias="ENABLE_RERANK"
+    )
+
+    # Embedding Configuration
+    embedding_model_name: str = Field(
+        default="intfloat/multilingual-e5-small",
+        alias="EMBEDDING_MODEL_NAME"
+    )
 
     # Directory Paths
     data_dir: Path = Field(default=Path("./data"), alias="DATA_DIR")
     index_dir: Path = Field(default=Path("./index"), alias="INDEX_DIR")
 
     # Retrieval Configurations
-    top_k_dense: int = Field(default=10, alias="TOP_K_DENSE")
-    top_k_sparse: int = Field(default=10, alias="TOP_K_SPARSE")
+    top_k_dense: int = Field(default=50, alias="TOP_K_DENSE")
+    top_k_sparse: int = Field(default=50, alias="TOP_K_SPARSE")
     top_k_final: int = Field(default=5, alias="TOP_K_FINAL")
     rrf_k: int = Field(default=60, alias="RRF_K")
 
@@ -80,7 +74,7 @@ class Settings(BaseSettings):
     index_build_batch_size: int = Field(default=256, alias="INDEX_BUILD_BATCH_SIZE")
     dataset_name: str = Field(default="ai4bharat/MSMARCO-XI", alias="DATASET_NAME")
     dataset_config: str = Field(default="default", alias="DATASET_CONFIG")
-    dataset_lang: str = Field(default="hin_Deva", alias="DATASET_LANG")  # target_lang filter value
+    dataset_lang: str = Field(default="hin_Deva", alias="DATASET_LANG")
     dataset_rows: int = Field(default=3000, alias="DATASET_ROWS")
 
     def ensure_directories(self) -> None:

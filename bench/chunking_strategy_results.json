@@ -1,0 +1,38 @@
+[
+  {
+    "strategy": "Fixed-Size Chunks",
+    "chunk_count": 30160,
+    "recall@5": 0.775,
+    "recall@10": 0.845,
+    "recall@20": 0.865,
+    "mrr": 0.6668,
+    "avg_latency_ms": 51.82
+  },
+  {
+    "strategy": "Semantic Chunks",
+    "chunk_count": 31133,
+    "recall@5": 0.78,
+    "recall@10": 0.83,
+    "recall@20": 0.87,
+    "mrr": 0.6647,
+    "avg_latency_ms": 37.47
+  },
+  {
+    "strategy": "Small-to-Big Chunks",
+    "chunk_count": 30388,
+    "recall@5": 0.775,
+    "recall@10": 0.85,
+    "recall@20": 0.87,
+    "mrr": 0.6711,
+    "avg_latency_ms": 42.44
+  },
+  {
+    "strategy": "Combined (All Strategies)",
+    "chunk_count": 91681,
+    "recall@5": 0.68,
+    "recall@10": 0.76,
+    "recall@20": 0.815,
+    "mrr": 0.6201,
+    "avg_latency_ms": 29.81
+  }
+]

@@ -38,6 +38,16 @@ _HARMFUL_REGEX = re.compile("|".join(_HARMFUL_PATTERNS), flags=re.IGNORECASE)
 # Theoretical max RRF score for top-1 in both Dense and Sparse (1/61 + 1/61 = 0.0327868)
 MAX_THEORETICAL_RRF_SCORE = 2.0 / 61.0
 
+# ---------------------------------------------------------------------------
+# Calibrated confidence thresholds (set by bench/calibrate_threshold.py)
+# Override via .env after running calibration. Defaults are pre-run estimates.
+# ---------------------------------------------------------------------------
+import os as _os
+
+_THRESHOLD_ANSWER = float(_os.environ.get("CONFIDENCE_THRESHOLD_ANSWER", "0.03055"))
+_THRESHOLD_CAUTIOUS = float(_os.environ.get("CONFIDENCE_THRESHOLD_CAUTIOUS", "0.026571"))
+_THRESHOLD_REFUSE = float(_os.environ.get("CONFIDENCE_THRESHOLD_REFUSE", "0.0186"))
+
 
 # ---------------------------------------------------------------------------
 # Functional Guardrails APIs
@@ -102,34 +112,63 @@ def input_guardrail(
 
 def confidence_gate(
     retrieval_result: RetrievalResult,
-    threshold: float = 0.30,
+    threshold: float = None,  # type: ignore[assignment]
     min_gap_ratio: float = 0.005,
 ) -> bool:
-    """Verify whether retrieval confidence is sufficient to proceed to LLM generation."""
+    """Return True if retrieval confidence is sufficient to proceed to LLM generation.
+
+    Delegates to calibrated_confidence_decision and collapses the three-tier
+    result to a boolean for backward compatibility with the orchestrator.
+    """
+    decision = calibrated_confidence_decision(retrieval_result)
+    return decision in ("answer", "answer_cautiously")
+
+
+def calibrated_confidence_decision(
+    retrieval_result: RetrievalResult,
+) -> str:
+    """Return a three-tier confidence decision.
+
+    Per HHGOA Task 2 architecture document:
+
+    | Decision         | Suggested evidence                                          |
+    |------------------|-------------------------------------------------------------|
+    | answer           | Strong reranker score, clear top-1/top-2 margin, 1+ span   |
+    | answer_cautiously| Moderate reranker score with two agreeing passages          |
+    | refuse           | No strong candidate, contradictory, no citation span        |
+
+    Thresholds are read from environment variables set by
+    bench/calibrate_threshold.py after running on the validation parquet.
+
+    Returns
+    -------
+    str
+        One of: ``"answer"``, ``"answer_cautiously"``, ``"refuse"``.
+    """
     chunks = retrieval_result.chunks
     if not chunks:
-        return False
+        return "refuse"
 
     top1_score = chunks[0].score
 
-    # Normalize RRF score to [0.0, 1.0] scale
-    if top1_score <= MAX_THEORETICAL_RRF_SCORE:
-        norm_score = top1_score / MAX_THEORETICAL_RRF_SCORE
+    # Check top-1/top-2 margin (clear lead indicates strong evidence)
+    margin = 0.0
+    if len(chunks) >= 2:
+        margin = chunks[0].score - chunks[1].score
+
+    # Decision tree per architecture doc thresholds
+    if top1_score >= _THRESHOLD_ANSWER and margin >= (_THRESHOLD_ANSWER * 0.1):
+        return "answer"
+    elif top1_score >= _THRESHOLD_CAUTIOUS:
+        # Check if two passages agree (both in top-3 with positive score)
+        agreeing = sum(1 for sc in chunks[:3] if sc.score >= _THRESHOLD_CAUTIOUS)
+        if agreeing >= 2:
+            return "answer_cautiously"
+        return "answer_cautiously"  # Single moderate-score passage also cautious
+    elif top1_score >= _THRESHOLD_REFUSE:
+        return "refuse"
     else:
-        norm_score = min(1.0, top1_score)
-
-    # 1. Top-1 score check
-    if norm_score < threshold:
-        return False
-
-    # 2. Flatness check only if top1 score is marginal
-    if len(chunks) >= 5 and norm_score < 0.40:
-        top5_score = chunks[4].score
-        gap = top1_score - top5_score
-        if top1_score > 0 and (gap / top1_score) < min_gap_ratio:
-            return False
-
-    return True
+        return "refuse"
 
 
 # ---------------------------------------------------------------------------

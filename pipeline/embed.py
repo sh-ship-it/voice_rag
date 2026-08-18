@@ -36,7 +36,7 @@ PASSAGE_PREFIX = "passage: "
 _DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 print(f"[pipeline.embed] Loading warm embedding model: {_MODEL_NAME!r} on device '{_DEVICE}' ...", flush=True)
 _WARM_MODEL: SentenceTransformer = SentenceTransformer(_MODEL_NAME, device=_DEVICE)
-_WARM_MODEL.max_seq_length = 32
+_WARM_MODEL.max_seq_length = 128  # Per Task 2 arch doc: benchmark 32/128/256; 128 chosen pending bench/benchmark_seq_lengths.py results
 if _DEVICE == "cuda":
     try:
         _WARM_MODEL = _WARM_MODEL.half()

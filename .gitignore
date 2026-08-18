@@ -2,8 +2,6 @@
 __pycache__/
 *.py[cod]
 *$py.class
-
-# C extensions
 *.so
 
 # Distribution / packaging
@@ -28,6 +26,7 @@ MANIFEST
 
 # Virtual environments
 .venv
+.venv/
 env/
 venv/
 ENV/
@@ -38,12 +37,29 @@ venv.bak/
 .env
 .env.local
 .env.*.local
+*.local
 
-# Project data & index artifacts (as specified in project requirements)
+# Project data & large index artifacts (not pushed to git)
 /data/*
 !/data/.gitkeep
 /index/*
 !/index/.gitkeep
+*.parquet
+*.index
+*.pkl
+*.zip
+kaggle_data/
+
+# Logs & temporary benchmark outputs
+logs/
+*.log
+results.jsonl
+
+# Node / Frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
 
 # Unit test / coverage reports
 htmlcov/
