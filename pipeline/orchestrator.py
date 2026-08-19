@@ -491,6 +491,7 @@ async def arun_pipeline(
         response_mode=gen_res.response_mode,
         fallback_reason=gen_res.fallback_reason,
     )
+    return response
 
 
 # ---------------------------------------------------------------------------
