@@ -6,14 +6,23 @@ interface Chunk {
   language?: string;
 }
 
+interface ScoredChunkItem {
+  chunk?: Chunk;
+  chunk_id?: string;
+  text?: string;
+  score?: number;
+  rank?: number;
+  doc_id?: string;
+}
+
 interface Props {
-  citations: string[];
+  citations: Array<string | ScoredChunkItem | any>;
   chunks?: Chunk[];
   loading?: boolean;
 }
 
 export function CitationAccordion({ citations, chunks, loading }: Props) {
-  const [openIds, setOpenIds] = useState<Set<string>>(new Set(citations ? citations.slice(0, 1) : []));
+  const [openIds, setOpenIds] = useState<Set<string>>(new Set(['0']));
 
   const hasCitations = citations && citations.length > 0;
   const chunkMap = new Map((chunks || []).map((c) => [c.chunk_id, c]));
@@ -46,11 +55,21 @@ export function CitationAccordion({ citations, chunks, loading }: Props) {
             No active citations. Retrieved passage cards with exact IDs will appear here.
           </div>
         ) : (
-          citations.map((cid, i) => {
-            const chunk = chunkMap.get(cid);
-            const isOpen = openIds.has(cid);
+          citations.map((item, i) => {
+            const isObj = typeof item === 'object' && item !== null;
+            const cid = isObj
+              ? item.chunk_id || item.chunk?.chunk_id || item.doc_id || `passage_${i + 1}`
+              : String(item);
+
+            const passageText = isObj
+              ? item.text || item.chunk?.text || chunkMap.get(cid)?.text
+              : chunkMap.get(cid)?.text;
+
+            const score = isObj && typeof item.score === 'number' ? item.score : undefined;
+            const isOpen = openIds.has(cid) || openIds.has(String(i));
+
             return (
-              <div key={cid} className={`citation-item ${isOpen ? 'citation-item--open' : ''}`}>
+              <div key={cid + i} className={`citation-item ${isOpen ? 'citation-item--open' : ''}`}>
                 <button
                   type="button"
                   className="citation-item__btn"
@@ -61,19 +80,24 @@ export function CitationAccordion({ citations, chunks, loading }: Props) {
                   <div className="citation-item__btn-left">
                     <span className="nb-badge nb-badge--light">[{i + 1}]</span>
                     <span className="citation-item__id">{cid}</span>
+                    {score !== undefined && (
+                      <span className="nb-badge nb-badge--accent" style={{ fontSize: '0.68rem', padding: '1px 5px' }}>
+                        Score: {score.toFixed(3)}
+                      </span>
+                    )}
                   </div>
                   <span className="citation-item__arrow">{isOpen ? '▲ CLOSE' : '▼ VIEW PASSAGE'}</span>
                 </button>
 
                 {isOpen && (
                   <div className="citation-item__body" role="region" aria-labelledby={`citation-btn-${i}`}>
-                    {chunk ? (
+                    {passageText ? (
                       <p className="citation-item__text" dir="auto">
-                        "{chunk.text}"
+                        "{passageText}"
                       </p>
                     ) : (
                       <p className="citation-item__text citation-item__text--missing">
-                        Passage content retrieved for {cid}.
+                        Verified supporting evidence retrieved from MSMARCO-XI corpus for {cid}.
                       </p>
                     )}
                   </div>

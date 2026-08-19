@@ -104,17 +104,26 @@ export default function App() {
         if (event.type === 'transcript') {
           partialResult.transcription = (event.data as { text: string }).text;
         } else if (event.type === 'token') {
-          partialResult.streamAnswer += (event.data as { token: string }).token;
+          partialResult.streamAnswer += (event.data as { token: string }).token || '';
           setResult((prev) => ({ ...prev, streamAnswer: partialResult.streamAnswer, streaming: true }));
         } else if (event.type === 'citations') {
-          partialResult.citations = event.data as unknown as string[];
+          partialResult.citations = (event.data as unknown as any[]) || [];
         } else if (event.type === 'timings') {
-          partialResult.timings = event.data as unknown as Record<string, number>;
+          partialResult.timings = (event.data as unknown as Record<string, number>) || {};
         } else if (event.type === 'meta') {
-          const meta = event.data as { confidence: string; grounded: boolean; status: string };
-          partialResult.confidence = meta.confidence as PipelineResponse['confidence'];
-          partialResult.grounded = meta.grounded;
-          partialResult.status = meta.status;
+          const meta = event.data as {
+            confidence?: string;
+            confidence_tier?: string;
+            grounded?: boolean;
+            status?: string;
+            evidence_text?: string;
+            response_mode?: string;
+          };
+          partialResult.confidence = (meta.confidence_tier || meta.confidence || 'medium') as PipelineResponse['confidence'];
+          partialResult.grounded = meta.grounded ?? true;
+          partialResult.status = meta.status || 'success';
+          partialResult.evidence_text = meta.evidence_text;
+          partialResult.response_mode = (meta.response_mode || 'extractive') as any;
         } else if (event.type === 'done') {
           es.close();
           setResult({
@@ -124,8 +133,11 @@ export default function App() {
             response: {
               query: q,
               answer: partialResult.streamAnswer,
-              citations: partialResult.citations || [],
+              evidence_text: partialResult.evidence_text,
+              response_mode: partialResult.response_mode || 'extractive',
+              citations: (partialResult.citations as any[]) || [],
               confidence: partialResult.confidence || 'medium',
+              confidence_tier: partialResult.confidence || 'medium',
               grounded: partialResult.grounded ?? true,
               status: partialResult.status || 'success',
               total_rag_core_ms: partialResult.timings?.total ?? 0,
@@ -136,9 +148,10 @@ export default function App() {
           });
           setLoading(false);
         } else if (event.type === 'error') {
-          setError('Stream error occurred. Retrying in direct mode...');
+          setError('Stream connection ended. Retrying in direct query mode...');
           setLoading(false);
           es.close();
+          handleTextQuery(q);
         }
       });
 
