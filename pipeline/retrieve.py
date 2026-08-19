@@ -130,8 +130,7 @@ class IndexRegistry:
 
             self.is_loaded = True
             print(f"[pipeline.retrieve] Loaded {len(self.chunk_list):,} chunks into warm retrieval memory.", flush=True)
-            if not self.bm25_index and len(self.chunk_list) <= 50000:
-                self._build_inverted_bm25()
+            self._build_inverted_bm25()
             return True
         except Exception as e:
             print(f"[pipeline.retrieve] Warning: Failed to load index files: {e}", flush=True)
@@ -139,21 +138,37 @@ class IndexRegistry:
             return True
 
     def _build_inverted_bm25(self):
-        """Build in-memory inverted index for sub-millisecond BM25 sparse search."""
+        """Build in-memory inverted index for sub-5ms BM25 sparse search."""
         import math
         from collections import defaultdict
 
         N = len(self.chunk_list)
         if N == 0:
             return
-        self.doc_lens = [len(c.text.split()) for c in self.chunk_list]
+
+        # If bm25_index already has pre-computed doc_freqs from Kaggle, invert it in 1s
+        if self.bm25_index and hasattr(self.bm25_index, "doc_freqs"):
+            self.doc_lens = getattr(self.bm25_index, "doc_len", [len(c.text.split()) for c in self.chunk_list])
+            self.avgdl = getattr(self.bm25_index, "avgdl", sum(self.doc_lens) / max(1, N))
+            self.idf = getattr(self.bm25_index, "idf", {})
+            self.k1 = getattr(self.bm25_index, "k1", 1.5)
+            self.b = getattr(self.bm25_index, "b", 0.75)
+
+            inv = defaultdict(dict)
+            for doc_id, freqs in enumerate(self.bm25_index.doc_freqs):
+                for t, cnt in freqs.items():
+                    inv[t][doc_id] = cnt
+            self.inv_index = dict(inv)
+            return
+
+        # Fallback build from chunk_list
+        self.doc_lens = [len(tokenize_for_bm25(c.text)) for c in self.chunk_list]
         self.avgdl = sum(self.doc_lens) / max(1, N)
         self.k1 = 1.5
         self.b = 0.75
 
         inv = defaultdict(dict)
         for doc_id, c in enumerate(self.chunk_list):
-            # Apply Hindi-aware NFC normalization before tokenizing
             tokens = tokenize_for_bm25(c.text)
             counts = defaultdict(int)
             for t in tokens:
@@ -162,16 +177,13 @@ class IndexRegistry:
                 inv[t][doc_id] = cnt
 
         self.inv_index = dict(inv)
-        # Recompute doc_lens using the new tokenizer for BM25 consistency
-        self.doc_lens = [len(tokenize_for_bm25(c.text)) for c in self.chunk_list]
-        self.avgdl = sum(self.doc_lens) / max(1, len(self.doc_lens))
         self.idf = {}
         for t, doc_dict in self.inv_index.items():
             df = len(doc_dict)
-            self.idf[t] = math.log(1 + (len(self.chunk_list) - df + 0.5) / (df + 0.5))
+            self.idf[t] = math.log(1 + (N - df + 0.5) / (df + 0.5))
 
     def fast_bm25_search(self, tokens: List[str], top_k: int = 10) -> List[Tuple[int, float]]:
-        """Perform sub-5ms inverted BM25 search with Hindi-aware NFC normalized tokens."""
+        """Perform sub-5ms inverted BM25 search."""
         if not hasattr(self, "inv_index") or not self.inv_index:
             if self.bm25_index:
                 scores = self.bm25_index.get_scores(tokens)
@@ -181,11 +193,12 @@ class IndexRegistry:
 
         scores: Dict[int, float] = {}
         for t in tokens:
-            # Apply same normalization as indexing
             t_norm = t.lower() if t.isascii() else t
             if t_norm not in self.inv_index:
                 continue
-            term_idf = self.idf[t_norm]
+            term_idf = self.idf.get(t_norm, 0.0)
+            if term_idf <= 0:
+                continue
             for doc_id, freq in self.inv_index[t_norm].items():
                 dl = self.doc_lens[doc_id]
                 denom = freq + self.k1 * (1 - self.b + self.b * (dl / self.avgdl))
