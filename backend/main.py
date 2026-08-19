@@ -227,10 +227,14 @@ async def stream_query(
                 await asyncio.sleep(0.005)  # 5ms inter-token delay
 
             # Emit citations
-            yield f"event: citations\ndata: {json.dumps(response.citations, ensure_ascii=False)}\n\n"
+            citations_data = [
+                c.model_dump(mode="json") if hasattr(c, "model_dump") else c
+                for c in response.citations
+            ]
+            yield f"event: citations\ndata: {json.dumps(citations_data, ensure_ascii=False)}\n\n"
 
             # Emit timings
-            yield f"event: timings\ndata: {json.dumps(response.timings)}\n\n"
+            yield f"event: timings\ndata: {json.dumps(response.timings or {})}\n\n"
 
             # Emit confidence + grounded + evidence_text + response_mode
             yield f"event: meta\ndata: {json.dumps({'confidence': response.confidence, 'confidence_tier': response.confidence_tier, 'grounded': response.grounded, 'status': response.status, 'evidence_text': response.evidence_text, 'response_mode': response.response_mode}, ensure_ascii=False)}\n\n"
