@@ -49,23 +49,20 @@ app = FastAPI(
 # ---------------------------------------------------------------------------
 # FRONTEND_URL can be a single URL or comma-separated list of URLs
 # e.g. "https://hhgoa-frontend.onrender.com,http://localhost:5173"
-_FRONTEND_URL_RAW = os.environ.get("FRONTEND_URL", "")
-_PROD_ORIGINS = [u.strip() for u in _FRONTEND_URL_RAW.split(",") if u.strip()]
-
-_ALLOWED_ORIGINS = list(dict.fromkeys([
-    *_PROD_ORIGINS,
-    "http://localhost:5173",   # Vite dev server
-    "http://localhost:3000",   # Alternative local port
-    "http://127.0.0.1:5173",
-    "http://127.0.0.1:3000",
-]))
+_FRONTEND_URL_RAW = os.environ.get("FRONTEND_URL", "*")
+if _FRONTEND_URL_RAW == "*" or not _FRONTEND_URL_RAW:
+    _ALLOWED_ORIGINS = ["*"]
+else:
+    _ALLOWED_ORIGINS = [u.strip() for u in _FRONTEND_URL_RAW.split(",") if u.strip()]
+    _ALLOWED_ORIGINS.extend(["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173", "http://127.0.0.1:3000"])
+    _ALLOWED_ORIGINS = list(dict.fromkeys(_ALLOWED_ORIGINS))
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "X-API-Key"],
+    allow_credentials=True if _ALLOWED_ORIGINS != ["*"] else False,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # ---------------------------------------------------------------------------
