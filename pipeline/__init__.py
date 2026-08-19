@@ -1,4 +1,4 @@
-"""Voice-enabled RAG Pipeline package."""
+"""Voice-enabled Pure Extractive RAG Pipeline package."""
 
 from pipeline.config import Settings, get_settings
 from pipeline.schemas import (
@@ -41,11 +41,17 @@ from pipeline.guardrails import (
     input_guardrail,
     confidence_gate,
 )
+from pipeline.confidence import (
+    compute_evidence_score,
+    extract_confidence_features,
+    ConfidenceResult,
+    ConfidenceFeatures,
+)
 from pipeline.generate import (
-    BaseGenerator,
-    CerebrasGenerator,
+    generate_extractive_response,
     generate_answer,
     agenerate_answer,
+    select_best_evidence_sentence,
 )
 from pipeline.stt import (
     BaseSTT,
@@ -54,7 +60,6 @@ from pipeline.stt import (
     atranscribe,
 )
 from pipeline.orchestrator import (
-    VoiceRAGOrchestrator,
     run_pipeline,
     arun_pipeline,
 )
@@ -97,20 +102,22 @@ __all__ = [
     "SafetyGuardrails",
     "input_guardrail",
     "confidence_gate",
-    # Generation
-    "BaseGenerator",
-    "CerebrasGenerator",
+    # Confidence
+    "compute_evidence_score",
+    "extract_confidence_features",
+    "ConfidenceResult",
+    "ConfidenceFeatures",
+    # Extractive Generation
+    "generate_extractive_response",
     "generate_answer",
     "agenerate_answer",
+    "select_best_evidence_sentence",
     # STT
     "BaseSTT",
     "SarvamSTT",
     "transcribe",
     "atranscribe",
     # Orchestrator
-    "VoiceRAGOrchestrator",
     "run_pipeline",
     "arun_pipeline",
 ]
-
-

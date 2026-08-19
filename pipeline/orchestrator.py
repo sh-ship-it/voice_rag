@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from pipeline.config import get_settings
 from pipeline.embed import embed_query
-from pipeline.generate import generate_answer, agenerate_answer
+from pipeline.generate import generate_extractive_response, generate_answer, agenerate_answer
 from pipeline.guardrails import confidence_gate, input_guardrail
 from pipeline.retrieve import hybrid_retrieve
 from pipeline.schemas import (

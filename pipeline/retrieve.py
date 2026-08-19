@@ -48,12 +48,63 @@ class IndexRegistry:
         chunk_list_path = self.index_dir / "chunk_list.pkl"
         chunk_map_path = self.index_dir / "chunk_metadata.pkl"
 
+        # Check if index files exist in nested subfolder
+        nested_dir = self.index_dir / "index"
+        if (nested_dir / "faiss_hnswflat.index").exists():
+            faiss_path = nested_dir / "faiss_hnswflat.index"
+            bm25_path = nested_dir / "bm25.pkl"
+            chunk_list_path = nested_dir / "chunk_list.pkl"
+            chunk_map_path = nested_dir / "chunk_metadata.pkl"
+
+        if not (faiss_path.exists() and bm25_path.exists() and chunk_list_path.exists()):
+            # Auto-download 380k index from Hugging Face Dataset
+            try:
+                import os
+                from huggingface_hub import snapshot_download
+                token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGING_FACE_HUB_TOKEN")
+                repo_id = os.environ.get("INDEX_DATASET_REPO", "shubham918748/voice-rag-index")
+                print(f"[pipeline.retrieve] Auto-downloading 380k index from Hugging Face Dataset '{repo_id}' ...", flush=True)
+                download_dir = snapshot_download(
+                    repo_id=repo_id,
+                    repo_type="dataset",
+                    local_dir=str(self.index_dir),
+                    token=token,
+                )
+                if (nested_dir / "faiss_hnswflat.index").exists():
+                    faiss_path = nested_dir / "faiss_hnswflat.index"
+                    bm25_path = nested_dir / "bm25.pkl"
+                    chunk_list_path = nested_dir / "chunk_list.pkl"
+                    chunk_map_path = nested_dir / "chunk_metadata.pkl"
+                elif (self.index_dir / "faiss_hnswflat.index").exists():
+                    faiss_path = self.index_dir / "faiss_hnswflat.index"
+                    bm25_path = self.index_dir / "bm25.pkl"
+                    chunk_list_path = self.index_dir / "chunk_list.pkl"
+                    chunk_map_path = self.index_dir / "chunk_metadata.pkl"
+            except Exception as dl_err:
+                print(f"[pipeline.retrieve] Auto-download notice: {dl_err}", flush=True)
+
         if not (faiss_path.exists() and bm25_path.exists() and chunk_list_path.exists()):
             self._init_in_memory_fallback_index()
             return True
 
         try:
             import faiss
+            import sys
+            import __main__
+            from pipeline.schemas import Chunk, ChunkMetadata
+
+            # Ensure compatibility with pickles generated in Kaggle notebooks (__main__.Chunk)
+            if not hasattr(__main__, "Chunk"):
+                setattr(__main__, "Chunk", Chunk)
+            if not hasattr(__main__, "ChunkMetadata"):
+                setattr(__main__, "ChunkMetadata", ChunkMetadata)
+
+            class NotebookCompatibleUnpickler(pickle.Unpickler):
+                def find_class(self, module, name):
+                    if name in ("Chunk", "ChunkMetadata"):
+                        from pipeline import schemas
+                        return getattr(schemas, name)
+                    return super().find_class(module, name)
 
             print(f"[pipeline.retrieve] Loading FAISS index from {faiss_path} ...", flush=True)
             self.faiss_index = faiss.read_index(str(faiss_path))
@@ -62,21 +113,25 @@ class IndexRegistry:
 
             print(f"[pipeline.retrieve] Loading BM25 index from {bm25_path} ...", flush=True)
             with open(bm25_path, "rb") as f:
-                self.bm25_index = pickle.load(f)
+                self.bm25_index = NotebookCompatibleUnpickler(f).load()
 
             print(f"[pipeline.retrieve] Loading chunk metadata from {chunk_list_path} ...", flush=True)
             with open(chunk_list_path, "rb") as f:
-                self.chunk_list = pickle.load(f)
+                self.chunk_list = NotebookCompatibleUnpickler(f).load()
 
             if chunk_map_path.exists():
-                with open(chunk_map_path, "rb") as f:
-                    self.chunk_map = pickle.load(f)
+                try:
+                    with open(chunk_map_path, "rb") as f:
+                        self.chunk_map = NotebookCompatibleUnpickler(f).load()
+                except Exception:
+                    self.chunk_map = {c.chunk_id: c for c in self.chunk_list}
             else:
                 self.chunk_map = {c.chunk_id: c for c in self.chunk_list}
 
             self.is_loaded = True
-            print(f"[pipeline.retrieve] Loaded {len(self.chunk_list)} chunks into warm retrieval memory.", flush=True)
-            self._build_inverted_bm25()
+            print(f"[pipeline.retrieve] Loaded {len(self.chunk_list):,} chunks into warm retrieval memory.", flush=True)
+            if not self.bm25_index and len(self.chunk_list) <= 50000:
+                self._build_inverted_bm25()
             return True
         except Exception as e:
             print(f"[pipeline.retrieve] Warning: Failed to load index files: {e}", flush=True)
